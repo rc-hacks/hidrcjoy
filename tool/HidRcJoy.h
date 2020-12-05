@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    Configuration m_configuration;
+    Configuration m_configuration{};
 };
 
 //---------------------------------------------------------------------------

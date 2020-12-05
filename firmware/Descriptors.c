@@ -166,7 +166,7 @@ static const USB_Descriptor_HIDReport_Datatype_t JoystickReport[] PROGMEM =
 static const USB_Descriptor_Device_t DeviceDescriptor PROGMEM =
 {
     { sizeof(USB_Descriptor_Device_t), DTYPE_Device },
-    VERSION_BCD(1,1,0),
+    VERSION_BCD(2,0,0),
     USB_CSCP_NoDeviceClass,
     USB_CSCP_NoDeviceSubclass,
     USB_CSCP_NoDeviceProtocol,
@@ -189,7 +189,7 @@ static const USB_Descriptor_Configuration_t ConfigurationDescriptor PROGMEM =
         1,
         NO_DESCRIPTOR,
         (USB_CONFIG_ATTR_RESERVED),
-        USB_CONFIG_POWER_MA(50),
+        USB_CONFIG_POWER_MA(100),
     },
     {
         { sizeof(USB_Descriptor_Interface_t), DTYPE_Interface },
@@ -214,12 +214,12 @@ static const USB_Descriptor_Configuration_t ConfigurationDescriptor PROGMEM =
         JOYSTICK_EPADDR,
         (EP_TYPE_INTERRUPT | ENDPOINT_ATTR_NO_SYNC | ENDPOINT_USAGE_DATA),
         JOYSTICK_EPSIZE,
-        20,
+        10,
     },
 };
 
 static const USB_Descriptor_String_t LanguageString PROGMEM = USB_STRING_DESCRIPTOR_ARRAY(LANGUAGE_ID_ENG);
-static const USB_Descriptor_String_t ManufacturerString PROGMEM = USB_STRING_DESCRIPTOR(L"greuel.org");
+static const USB_Descriptor_String_t ManufacturerString PROGMEM = USB_STRING_DESCRIPTOR(L"Marius Greuel");
 static const USB_Descriptor_String_t ProductString PROGMEM = USB_STRING_DESCRIPTOR(L"R/C to PC Joystick");
 static const USB_Descriptor_String_t SerialString PROGMEM = USB_STRING_DESCRIPTOR(L"greuel.org:hidrcjoy");
 

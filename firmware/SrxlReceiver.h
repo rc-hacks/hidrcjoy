@@ -64,23 +64,23 @@ public:
         {
             if (time - m_lastUpdateTime > signalTimeout)
             {
-                m_isDataAvailable = false;
+                m_isReceiving = false;
             }
         }
         else
         {
             m_lastUpdateCount = updateCounter;
             m_lastUpdateTime = time;
-            m_isDataAvailable = true;
+            m_isReceiving = true;
         }
     }
 
-    bool IsDataAvailable() const
+    bool IsReceiving() const
     {
-        return m_isDataAvailable;
+        return m_isReceiving;
     }
 
-    uint16_t GetChannelPulseWidth(uint8_t channel) const
+    uint16_t GetChannelData(uint8_t channel) const
     {
         const Frame& frame = GetReceivedFrame();
         uint8_t index = 1 + channel * 2;
@@ -90,16 +90,8 @@ public:
         return TicksToUs(value);
     }
 
-    void OnDataReceived(uint32_t time)
+    void OnDataReceived(uint8_t ch, uint32_t time)
     {
-#if defined(UDR0)
-        uint8_t ch = UDR0;
-#elif defined(UDR1)
-        uint8_t ch = UDR1;
-#else
-#error Unsupported configuration
-#endif
-
         uint32_t diff = time - m_lastTime;
         m_lastTime = time;
 
@@ -124,7 +116,7 @@ public:
     }
 
 private:
-    uint16_t TicksToUs(uint16_t value) const
+    static uint16_t TicksToUs(uint16_t value)
     {
         return 800 + static_cast<uint16_t>(static_cast<uint32_t>(value & 0xFFF) * (2200 - 800) / 0x1000);
     }
@@ -220,5 +212,17 @@ private:
     uint8_t m_updateCounter = 0;
     uint8_t m_lastUpdateCount = 0;
     uint32_t m_lastUpdateTime = 0;
-    bool m_isDataAvailable = false;
-};
+    bool m_isReceiving = false;
+} g_SrxlReceiver;
+
+#if defined(UCSR0A)
+ISR(USART1_RX_vect)
+{
+    g_SrxlReceiver.OnDataReceived(UDR0, g_Timer.GetTimeInUs());
+}
+#elif defined(UCSR1A)
+ISR(USART1_RX_vect)
+{
+    g_SrxlReceiver.OnDataReceived(UDR1, g_Timer.GetTimeInUs());
+}
+#endif

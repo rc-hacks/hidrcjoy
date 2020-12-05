@@ -1,0 +1,3 @@
+[submodule "firmware/atl"]
+	path = firmware/atl
+	url = https://github.com/mariusgreuel/atl.git

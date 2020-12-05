@@ -18,9 +18,9 @@ class Receiver
 public:
     void Initialize()
     {
-        m_PpmReceiver.Initialize();
+        g_PpmReceiver.Initialize();
 #if HIDRCJOY_SRXL
-        m_SrxlReceiver.Initialize();
+        g_SrxlReceiver.Initialize();
 #endif
     }
 
@@ -41,7 +41,7 @@ public:
 
     void UpdateConfiguration()
     {
-        m_PpmReceiver.SetConfiguration(m_Configuration.m_minSyncPulseWidth, (m_Configuration.m_flags & Configuration::Flags::InvertedSignal) != 0);
+        g_PpmReceiver.SetConfiguration(m_Configuration.m_minSyncPulseWidth, (m_Configuration.m_flags & Configuration::Flags::InvertedSignal) != 0);
     }
 
     bool IsValidConfiguration() const
@@ -72,26 +72,26 @@ public:
         return true;
     }
 
-    void Update(uint32_t time)
+    void Update()
     {
-        m_PpmReceiver.Update(time);
+        //g_PpmReceiver.Update();
 #if HIDRCJOY_SRXL
-        m_SrxlReceiver.Update(time);
+        g_SrxlReceiver.Update(TCNT1);
 #endif
     }
 
-    uint16_t GetChannelPulseWidth(uint8_t channel) const
+    uint16_t GetChannelData(uint8_t channel) const
     {
         uint8_t index = m_Configuration.m_mapping[channel];
         
-        if (m_PpmReceiver.IsDataAvailable())
+        if (g_PpmReceiver.IsReceiving())
         {
-            return m_PpmReceiver.GetChannelPulseWidth(index);
+            return g_PpmReceiver.GetChannelData(index);
         }
 #if HIDRCJOY_SRXL
-        else if (m_SrxlReceiver.IsDataAvailable())
+        else if (g_SrxlReceiver.IsReceiving())
         {
-            return m_SrxlReceiver.GetChannelPulseWidth(index);
+            return g_SrxlReceiver.GetChannelData(index);
         }
 #endif
         else
@@ -102,38 +102,57 @@ public:
 
     uint8_t GetStatus() const
     {
-        if (m_PpmReceiver.IsDataAvailable())
+        if (g_PpmReceiver.IsReceiving())
         {
-            return PpmSignal;
+            return Status::PpmSignal;
         }
 #if HIDRCJOY_SRXL
-        else if (m_SrxlReceiver.IsDataAvailable())
+        else if (g_SrxlReceiver.IsReceiving())
         {
-            return SrxlSignal;
+            return Status::SrxlSignal;
         }
 #endif
         else
         {
-            return NoSignal;
+            return Status::NoSignal;
         }
+    }
+
+    bool IsReceiving() const
+    {
+        return g_PpmReceiver.IsReceiving();
+    }
+
+    bool HasNewData() const
+    {
+        return g_PpmReceiver.HasNewData();
+    }
+
+    void AcknowledgeNewData()
+    {
+        g_PpmReceiver.AcknowledgeNewData();
     }
 
     uint8_t GetValue(uint8_t channel) const
     {
-        int16_t center = m_Configuration.m_centerChannelPulseWidth;
-        int16_t range = m_Configuration.m_channelPulseWidthRange;
-        int16_t value = Polarity(channel, (int16_t)GetChannelPulseWidth(channel) - center);
-        int32_t scaled = 128 + 128 * (int32_t)value / range;
-        return Saturate(scaled);
+        return ScaleValue(channel, GetChannelData(channel));
     }
 
 private:
-    int16_t Polarity(uint8_t channel, int16_t value) const
+    int16_t ScaleValue(uint8_t channel, int16_t data) const
+    {
+        int16_t center = m_Configuration.m_centerChannelPulseWidth;
+        int16_t range = m_Configuration.m_channelPulseWidthRange;
+        int16_t value = InvertValue(channel, data - center);
+        return SaturateValue(128 + (128 * (int32_t)value / range));
+    }
+
+    int16_t InvertValue(uint8_t channel, int16_t value) const
     {
         return (m_Configuration.m_polarity & (1 << channel)) == 0 ? value : -value;
     }
 
-    uint8_t Saturate(int32_t value) const
+    uint8_t SaturateValue(int32_t value) const
     {
         if (value < 0)
         {
@@ -151,8 +170,4 @@ private:
 
 public:
     Configuration m_Configuration;
-    PpmReceiver m_PpmReceiver;
-#if HIDRCJOY_SRXL
-    SrxlReceiver m_SrxlReceiver;
-#endif
 };

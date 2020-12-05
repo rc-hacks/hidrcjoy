@@ -229,7 +229,7 @@ public:
 
     LRESULT OnTimingChange(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr && !m_noConfigurationUpdate)
+        if (m_pDevice != nullptr && !m_lockControlUpdate)
         {
             auto pConfiguration = m_pDevice->GetConfiguration();
             pConfiguration->m_minSyncPulseWidth = static_cast<uint16_t>(GetIntegerValue(m_ecMinSyncPulseWidth));
@@ -245,7 +245,7 @@ public:
 
     LRESULT OnChannelPolarity(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr && !m_noConfigurationUpdate)
+        if (m_pDevice != nullptr && !m_lockControlUpdate)
         {
             int channel = wID - IDC_CHANNEL1_POLARITY;
 
@@ -261,7 +261,7 @@ public:
 
     LRESULT OnChannelSource(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr && !m_noConfigurationUpdate)
+        if (m_pDevice != nullptr && !m_lockControlUpdate)
         {
             int channel = (wID - IDC_CHANNEL1_SOURCE1) / 10;
             int source = (wID - IDC_CHANNEL1_SOURCE1) % 10;
@@ -270,7 +270,7 @@ public:
             pConfiguration->m_mapping[channel] = static_cast<uint8_t>(source);
 
             UpdateDeviceConfiguration();
-            UpdateAssignmentButtons(pConfiguration);
+            UpdateSourceButtons(pConfiguration);
         }
 
         return 0;
@@ -356,7 +356,6 @@ private:
         const auto& devices = m_hidrcjoy.GetDevices();
 
         size_t count = devices.size();
-
         if (count == 0)
         {
             m_stDeviceStatus.SetWindowText(_T("No devices found"));
@@ -366,7 +365,9 @@ private:
             return S_FALSE;
         }
 
-        for (auto& device : devices)
+        m_stDeviceStatus.SetWindowText(FormatString(_T("Found %zu device(s)"), count));
+
+        for (const auto& device : devices)
         {
             m_cbDevices.AddString(GetFriendlyDeviceName(device.get()));
         }
@@ -435,12 +436,9 @@ private:
                 m_pDevice->ReadConfiguration();
 
                 auto pConfiguration = m_pDevice->GetConfiguration();
-
-                m_noConfigurationUpdate = true;
                 UpdateSignalControls(pConfiguration);
                 UpdatePolarityButtons(pConfiguration);
-                UpdateAssignmentButtons(pConfiguration);
-                m_noConfigurationUpdate = false;
+                UpdateSourceButtons(pConfiguration);
             }
             catch (std::exception&)
             {
@@ -450,34 +448,45 @@ private:
 
     void UpdateSignalControls(const Configuration* pConfiguration)
     {
+        m_lockControlUpdate = true;
+
         m_ecMinSyncPulseWidth.SetWindowText(FormatString(_T("%d"), pConfiguration->m_minSyncPulseWidth));
         m_ecCenterChannelPulseWidth.SetWindowText(FormatString(_T("%d"), pConfiguration->m_centerChannelPulseWidth));
         m_ecChannelPulseWidthRange.SetWindowText(FormatString(_T("%d"), pConfiguration->m_channelPulseWidthRange));
         m_btInvertedSignal.SetCheck((pConfiguration->m_flags & Configuration::InvertedSignal) != 0 ? BST_CHECKED : BST_UNCHECKED);
+
+        m_lockControlUpdate = false;
     }
 
     void UpdatePolarityButtons(const Configuration* pConfiguration)
     {
+        m_lockControlUpdate = true;
+
         for (int i = 0; i < Configuration::maxChannels; i++)
         {
             CButton(GetDlgItem(IDC_CHANNEL1_POLARITY + i)).SetWindowText((pConfiguration->m_polarity & (1 << i)) == 0 ? _T("+") : _T("-"));
         }
+
+        m_lockControlUpdate = false;
     }
 
-    void UpdateAssignmentButtons(const Configuration* pConfiguration)
+    void UpdateSourceButtons(const Configuration* pConfiguration)
     {
+        m_lockControlUpdate = true;
+
         for (int i = 0; i < Configuration::maxChannels; i++)
         {
-            UpdateAssignmentButtons(IDC_CHANNEL1_SOURCE1 + 10 * i, pConfiguration->m_mapping[i]);
+            for (int j = 0; j < Configuration::maxChannels; j++)
+            {
+                CButton(GetDlgItem(IDC_CHANNEL1_SOURCE1 + 10 * i + j)).SetState(pConfiguration->m_mapping[i] == j);
+            }
         }
+
+        m_lockControlUpdate = false;
     }
 
-    void UpdateAssignmentButtons(int nIdStart, int value)
+    void UpdateSourceButtons(int nIdStart, int value)
     {
-        for (int i = 0; i < Configuration::maxChannels; i++)
-        {
-            CButton(GetDlgItem(nIdStart + i)).SetState(value == i);
-        }
     }
 
     void UpdateReportControls(const UsbReport& report)
@@ -543,5 +552,5 @@ private:
 private:
     HidRcJoy m_hidrcjoy;
     HidRcJoyDevice* m_pDevice = nullptr;
-    bool m_noConfigurationUpdate = false;
+    bool m_lockControlUpdate = false;
 };

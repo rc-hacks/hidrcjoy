@@ -3,33 +3,30 @@
 # Copyright (C) 2018 Marius Greuel. All rights reserved.
 #
 
-ifndef MY_TOOLCHAIN_AVR8
-    $(error error : environment variable MY_TOOLCHAIN_AVR8 is not defined. MY_TOOLCHAIN_AVR8 must point to the tools-avr8 repository)
-endif
+BOARD ?= BOARD_ARDUINO_MICRO
+#BOARD ?= BOARD_SPARKFUN_PROMICRO
+#BOARD ?= BOARD_FABISP
+#BOARD ?= BOARD_DIGISTUMP_DIGISPARK
+#BOARD ?= BOARD_DIGISTUMP_DIGISPARKPRO
 
-#BOARD ?= Digispark
-#BOARD ?= DigisparkPro
-#BOARD ?= FabISP
-BOARD ?= ProMicro
+USB = USB_ATL
+xUSB = USB_LUFA
+AVRDUDE_FLAGS = -c avrisp2 -B 1
 
-include $(MY_TOOLCHAIN_AVR8)/build/boards.mk
+include atl/boards.mk
 
 TARGET = hidrcjoy
 SOURCES = hidrcjoy.cpp Descriptors.c
-CPPFLAGS += -DBOARD_$(BOARD) -DUSB_$(USB)
+CPPFLAGS += -D$(BOARD) -D$(USB) -Iatl/include
 
-ifeq ($(USB),V_USB)
-    SOURCES += usbdrv/usbdrv.c usbdrv/usbdrvasm.S
-    CPPFLAGS += -I. -DDEBUG_LEVEL=0
-else ifeq ($(USB),LUFA)
+ifeq ($(USB),USB_LUFA)
     ARCH = AVR8
     F_USB = $(F_CPU)
 
-ifndef MY_LUFA_PATH
-    $(error error : environment variable MY_LUFA_PATH is not defined. MY_LUFA_PATH must point to the LUFA folder 'lufa-LUFA-170418')
+ifndef LUFA_PATH
+    $(error error : environment variable LUFA_PATH is not defined. LUFA_PATH must point to the LUFA folder 'lufa-LUFA-170418')
 endif
 
-    LUFA_PATH = $(MY_LUFA_PATH)/LUFA
     DMBS_LUFA_PATH ?= $(LUFA_PATH)/Build/LUFA
     include $(DMBS_LUFA_PATH)/lufa-sources.mk
     include $(DMBS_LUFA_PATH)/lufa-gcc.mk
@@ -39,6 +36,9 @@ endif
     CPPFLAGS += -D USB_DEVICE_ONLY -D USE_STATIC_OPTIONS="(USB_DEVICE_OPT_FULLSPEED | USB_OPT_REG_ENABLED | USB_OPT_AUTO_PLL)"
     CPPFLAGS += -D USE_FLASH_DESCRIPTORS -D FIXED_CONTROL_ENDPOINT_SIZE=8 -D FIXED_NUM_CONFIGURATIONS=1
     CPPFLAGS += -D NO_INTERNAL_SERIAL -D NO_DEVICE_REMOTE_WAKEUP -D NO_DEVICE_SELF_POWER
+else ifeq ($(USB),USB_V_USB)
+    SOURCES += usbdrv/usbdrv.c usbdrv/usbdrvasm.S
+    CPPFLAGS += -I. -DDEBUG_LEVEL=0
 endif
 
-include $(MY_TOOLCHAIN_AVR8)/build/avr8.mk
+include atl/avr8.mk

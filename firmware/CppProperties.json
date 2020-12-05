@@ -1,45 +1,47 @@
 {
-  // Configuration file for 'Open Folder' in Visual Studio 2017.
-  // The environment variable 'GNU_TOOLCHAIN_AVR8' must point to the AVR8 toolchain.
+  // Configuration file for 'Open Folder' in Visual Studio 2019.
+  // The environment variable 'AVR8_GNU_TOOLCHAIN' must point to the AVR8 toolchain.
   "configurations": [
     {
-      "name": "ProMicro",
+      "name": "Arduino Micro",
       "includePath": [
-        "${env.GNU_TOOLCHAIN_AVR8}\\avr\\include\\**",
-        "${env.GNU_TOOLCHAIN_AVR8}\\lib\\gcc\\avr\\5.4.0\\include",
-        "${env.GNU_TOOLCHAIN_AVR8}\\lib\\gcc\\avr\\5.4.0\\include-fixed",
-        "${workspaceRoot}\\..\\..\\lufa-LUFA-170418\\**",
-        "${workspaceRoot}\\**"
+        "${env.AVR8_GNU_TOOLCHAIN}/avr/include/**",
+        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include",
+        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include-fixed",
+        "${env.LUFA_PATH}/..",
+        "${workspaceRoot}/**"
       ],
       "defines": [
         "__GNUC__=5",
         "__STDC_LIMIT_MACROS",
         "__AVR_ATmega32U4__",
         "F_CPU=16000000",
-        "BOARD_ProMicro",
-        "USB_LUFA"
+        "BOARD_ARDUINO_MICRO",
+        "USB_ATL",
+        "xUSB_LUFA",
+        "xUSE_STATIC_OPTIONS=\"(USB_DEVICE_OPT_FULLSPEED | USB_OPT_REG_ENABLED | USB_OPT_AUTO_PLL)\""
       ],
       "intelliSenseMode": "linux-gcc-arm",
       "compilerSwitches": "-std=c++11"
-    },
+    } /*,
     {
       "name": "Digispark",
       "includePath": [
-        "${env.GNU_TOOLCHAIN_AVR8}\\avr\\include\\**",
-        "${env.GNU_TOOLCHAIN_AVR8}\\lib\\gcc\\avr\\5.4.0\\include",
-        "${env.GNU_TOOLCHAIN_AVR8}\\lib\\gcc\\avr\\5.4.0\\include-fixed",
-        "${workspaceRoot}\\**"
+        "${env.AVR8_GNU_TOOLCHAIN}/avr/include/**",
+        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include",
+        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include-fixed",
+        "${workspaceRoot}/**"
       ],
       "defines": [
         "__GNUC__=5",
         "__STDC_LIMIT_MACROS",
         "__AVR_ATtiny85__",
         "F_CPU=16500000",
-        "BOARD_Digispark",
+        "BOARD_DIGISTUMP_DIGISPARK",
         "USB_V_USB"
       ],
       "intelliSenseMode": "linux-gcc-arm",
       "compilerSwitches": "-std=c++11"
-    }
+    }*/
   ]
 }

@@ -1,6 +1,3 @@
-# Visual Studio cache/options directory
-.vs/
-
 # Build results
 [Oo]bjs/
 *.hex
