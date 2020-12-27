@@ -14,8 +14,8 @@ struct Configuration
 {
 #ifdef __cplusplus
     static const uint8_t version = 0x11;
-    static const uint8_t minChannels = 4;
-    static const uint8_t maxChannels = MAX_CHANNELS;
+    static const uint8_t maxInputChannels = 7;
+    static const uint8_t maxOutputChannels = 7;
     static const uint16_t minSyncWidth = 2000;
     static const uint16_t maxSyncWidth = 10000;
     static const uint16_t minChannelPulseWidth = 500;

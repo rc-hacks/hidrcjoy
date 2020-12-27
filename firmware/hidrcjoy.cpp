@@ -6,119 +6,202 @@
 #include <stdint.h>
 #include <string.h>
 #include <avr/eeprom.h>
-#include <avr/interrupt.h>
 #include <avr/io.h>
-#include <avr/wdt.h>
 #include <util/delay.h>
 
-#define ATL_DEBUG 1
-#define ATL_USB_DEBUG 1
-#define ATL_USB_DEBUG_EXT 0
+#define ATL_DEBUG 0
 #include <boards/arduino_micro.h>
 #include <atl/debug.h>
 #include <atl/interrupts.h>
 #include <atl/watchdog.h>
 #include <atl/std_streams.h>
-using namespace atl;
-
-#if defined(USB_ATL)
 #include <atl/usb_device.h>
 #include <atl/usb_hid_spec.h>
-#elif defined(USB_LUFA)
-#include <LUFA/Drivers/USB/USB.h>
-#include "Descriptors.h"
-#elif defined(USB_V_USB)
-extern "C" {
-#include "usbdrv/usbdrv.h"
-}
-#endif
 
-#if ATL_DEBUG
-BuiltinLed g_BuiltinLed;
-DigitalOutputPin<10> g_pinDebug10;
-DigitalOutputPin<11> g_pinDebug11;
-SerialT<SerialUnbuffered<SerialDriverUsart1>> g_serial;
-#endif
+#include "PpmReceiver.h"
+#include "PpmReceiverTimer1.h"
+#include "SrxlReceiver.h"
+#include "SrxlReceiverTimer3.h"
+#include "SrxlReceiverUsart1.h"
+#include "UsbReports.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define COUNTOF(array) (sizeof(array) / sizeof(array[0]))
+#define COUNTOF(x) (sizeof(x) / sizeof(x[0]))
 
-#if defined (BOARD_ARDUINO_MICRO) || defined(BOARD_SPARKFUN_PROMICRO)
-#define HIDRCJOY_SRXL 1
-#define PPM_SIGNAL_PIN PIND
-#define PPM_SIGNAL_PORT PORTD
-#define PPM_SIGNAL 4 // Pin 4
-#define LED_STATUS_DDR DDRB
-#define LED_STATUS_PORT PORTB
-#define LED_STATUS 0 // Pin 17 (built-in Rx LED)
-#elif defined (BOARD_DIGISTUMP_DIGISPARK)
-#define HIDRCJOY_SRXL 0
-#define PPM_SIGNAL_PIN PINB
-#define PPM_SIGNAL_PORT PORTB
-#define PPM_SIGNAL 2 // Pin 2
-#define LED_STATUS_DDR DDRB
-#define LED_STATUS_PORT PORTB
-#define LED_STATUS 1 // Pin 1 (built-in LED)
-#elif defined (BOARD_DIGISTUMP_DIGISPARKPRO)
-#define HIDRCJOY_SRXL 0
-#define PPM_SIGNAL_PIN PINA
-#define PPM_SIGNAL_PORT PORTA
-#define PPM_SIGNAL 4
-#define LED_STATUS_DDR DDRB
-#define LED_STATUS_PORT PORTB
-#define LED_STATUS 1 // Pin 1 (built-in LED)
-#elif defined (BOARD_FABISP)
-#define HIDRCJOY_SRXL 0
-#define PPM_SIGNAL_PIN PINA
-#define PPM_SIGNAL_PORT PORTA
-#define PPM_SIGNAL 6 // ADC6/MOSI
-#define LED_STATUS_DDR DDRA
-#define LED_STATUS_PORT PORTA
-#define LED_STATUS 5 // PA5/MISO
-#else
-#error Unsupported board
+using namespace atl;
+
+static BuiltinLed g_BuiltinLed;
+static DigitalInputPin<4> g_SignalPin;
+static PpmReceiver<PpmReceiverTimer1> g_PpmReceiver;
+static SrxlReceiver<SrxlReceiverTimer3, SrxlReceiverUsart1> g_SrxlReceiver;
+static UsbReport g_UsbReport;
+static UsbEnhancedReport g_UsbEnhancedReport;
+static Configuration g_Configuration;
+static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
+
+#if ATL_DEBUG
+DigitalOutputPin<10> g_pinDebug10;
+DigitalOutputPin<11> g_pinDebug11;
+DigitalOutputPin<12> g_pinDebug12;
+SerialT<SerialUnbuffered<SerialDriverUsart1>> g_serial;
 #endif
 
 //---------------------------------------------------------------------------
 
-static Timer g_Timer;
-#include "Receiver.h"
-#include "UsbReports.h"
+class Receiver
+{
+public:
+    void Initialize()
+    {
+        g_PpmReceiver.Initialize();
+        g_SrxlReceiver.Initialize();
+    }
+
+    void Terminate()
+    {
+        g_PpmReceiver.Terminate();
+        g_SrxlReceiver.Terminate();
+    }
+
+    void LoadDefaultConfiguration()
+    {
+        g_Configuration.m_version = Configuration::version;
+        g_Configuration.m_flags = 0;
+        g_Configuration.m_minSyncPulseWidth = 3500;
+        g_Configuration.m_centerChannelPulseWidth = 1500;
+        g_Configuration.m_channelPulseWidthRange = 550;
+        g_Configuration.m_polarity = 0;
+
+        for (uint8_t i = 0; i < COUNTOF(g_Configuration.m_mapping); i++)
+        {
+            g_Configuration.m_mapping[i] = i;
+        }
+    }
+
+    void UpdateConfiguration()
+    {
+        auto minSyncPulseWidth = g_Configuration.m_minSyncPulseWidth;
+        auto invertedSignal = (g_Configuration.m_flags & Configuration::Flags::InvertedSignal) != 0;
+        ATL_DEBUG_PRINT("Configuration: MinSyncPulseWidth: %u\n", minSyncPulseWidth);
+        ATL_DEBUG_PRINT("Configuration: InvertedSignal: %d\n", invertedSignal);
+        g_PpmReceiver.SetConfiguration(minSyncPulseWidth, invertedSignal);
+    }
+
+    bool IsValidConfiguration() const
+    {
+        if (g_Configuration.m_version != Configuration::version)
+            return false;
+
+        if (g_Configuration.m_minSyncPulseWidth < Configuration::minSyncWidth ||
+            g_Configuration.m_minSyncPulseWidth > Configuration::maxSyncWidth)
+            return false;
+
+        if (g_Configuration.m_centerChannelPulseWidth < Configuration::minChannelPulseWidth ||
+            g_Configuration.m_centerChannelPulseWidth > Configuration::maxChannelPulseWidth)
+            return false;
+
+        if (g_Configuration.m_channelPulseWidthRange < 10 ||
+            g_Configuration.m_channelPulseWidthRange > Configuration::maxChannelPulseWidth)
+            return false;
+
+        for (uint8_t i = 0; i < COUNTOF(g_Configuration.m_mapping); i++)
+        {
+            if (g_Configuration.m_mapping[i] >= Configuration::maxInputChannels)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    uint8_t GetStatus() const
+    {
+        if (g_PpmReceiver.IsReceiving())
+        {
+            return Status::PpmSignal;
+        }
+        else if (g_SrxlReceiver.IsReceiving())
+        {
+            return Status::SrxlSignal;
+        }
+        else
+        {
+            return Status::NoSignal;
+        }
+    }
+
+    uint16_t GetChannelData(uint8_t channel) const
+    {
+        uint8_t index = g_Configuration.m_mapping[channel];
+
+        if (g_PpmReceiver.IsReceiving())
+        {
+            return index < g_PpmReceiver.GetChannelCount() ? g_PpmReceiver.GetChannelData(index) : g_Configuration.m_centerChannelPulseWidth;
+        }
+        else if (g_SrxlReceiver.IsReceiving())
+        {
+            return index < g_SrxlReceiver.GetChannelCount() ? g_SrxlReceiver.GetChannelData(index) : g_Configuration.m_centerChannelPulseWidth;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+
+    uint8_t GetChannelValue(uint8_t channel) const
+    {
+        return ScaleValue(channel, GetChannelData(channel));
+    }
+
+    bool IsReceiving() const
+    {
+        return g_PpmReceiver.IsReceiving();
+    }
+
+    bool HasNewData() const
+    {
+        return g_PpmReceiver.HasNewData();
+    }
+
+    void ClearNewData()
+    {
+        g_PpmReceiver.ClearNewData();
+    }
+
+private:
+    int16_t ScaleValue(uint8_t channel, int16_t data) const
+    {
+        int16_t center = g_Configuration.m_centerChannelPulseWidth;
+        int16_t range = g_Configuration.m_channelPulseWidthRange;
+        int16_t value = InvertValue(channel, data - center);
+        return SaturateValue(128 + (128 * (int32_t)value / range));
+    }
+
+    int16_t InvertValue(uint8_t channel, int16_t value) const
+    {
+        return (g_Configuration.m_polarity & (1 << channel)) == 0 ? value : -value;
+    }
+
+    uint8_t SaturateValue(int32_t value) const
+    {
+        if (value < 0)
+        {
+            return 0;
+        }
+        else if (value > 255)
+        {
+            return 255;
+        }
+        else
+        {
+            return value;
+        }
+    }
+} g_Receiver;
 
 //---------------------------------------------------------------------------
-
-static Receiver g_Receiver;
-static UsbReport g_UsbReport;
-static UsbEnhancedReport g_UsbEnhancedReport;
-static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
-
-//---------------------------------------------------------------------------
-
-static void PrepareUsbReport()
-{
-    auto status = g_Receiver.GetStatus();
-
-    g_UsbReport.m_reportId = UsbReportId;
-
-    for (uint8_t i = 0; i < COUNTOF(g_UsbReport.m_value); i++)
-    {
-        g_UsbReport.m_value[i] = status != Status::NoSignal ? g_Receiver.GetValue(i) : 0x80;
-    }
-}
-
-static void PrepareUsbEnhancedReport()
-{
-    auto status = g_Receiver.GetStatus();
-
-    g_UsbEnhancedReport.m_reportId = UsbEnhancedReportId;
-    g_UsbEnhancedReport.m_status = status;
-
-    for (uint8_t i = 0; i < COUNTOF(g_UsbEnhancedReport.m_channelPulseWidth); i++)
-    {
-        g_UsbEnhancedReport.m_channelPulseWidth[i] = status != Status::NoSignal ? g_Receiver.GetChannelData(i) : 0;
-    }
-}
 
 static void LoadConfigurationDefaults()
 {
@@ -128,7 +211,7 @@ static void LoadConfigurationDefaults()
 
 static void ReadConfigurationFromEeprom()
 {
-    eeprom_read_block(&g_Receiver.m_Configuration, &g_EepromConfiguration, sizeof(g_EepromConfiguration));
+    eeprom_read_block(&g_Configuration, &g_EepromConfiguration, sizeof(g_EepromConfiguration));
 
     if (!g_Receiver.IsValidConfiguration())
     {
@@ -140,7 +223,7 @@ static void ReadConfigurationFromEeprom()
 
 static void WriteConfigurationToEeprom()
 {
-    eeprom_write_block(&g_Receiver.m_Configuration, &g_EepromConfiguration, sizeof(g_EepromConfiguration));
+    eeprom_write_block(&g_Configuration, &g_EepromConfiguration, sizeof(g_EepromConfiguration));
 }
 
 static void JumpToBootloader()
@@ -149,13 +232,10 @@ static void JumpToBootloader()
 }
 
 //---------------------------------------------------------------------------
-// USB
 
-#if defined(USB_ATL)
-
-class UsbDevice : public UsbDeviceT<UsbDevice>
+class HidRcJoyDevice : public UsbDeviceT<HidRcJoyDevice>
 {
-    using base = UsbDeviceT<UsbDevice>;
+    using UsbDevice = UsbDeviceT<HidRcJoyDevice>;
 
     static const uint16_t idVendor = 0x16C0;
     static const uint16_t idProduct = 0x03E8;
@@ -166,6 +246,51 @@ class UsbDevice : public UsbDeviceT<UsbDevice>
     static const uint8_t HidEndpointSize = 8;
 
 public:
+    bool WriteReport(void)
+    {
+        if (IsConfigured())
+        {
+            UsbInEndpoint endpoint(1);
+            if (endpoint.IsWriteAllowed())
+            {
+                CreateReport();
+                endpoint.WriteData(&g_UsbReport, sizeof(g_UsbReport), MemoryType::Ram);
+                endpoint.CompleteTransfer();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void CreateReport()
+    {
+        auto status = g_Receiver.GetStatus();
+
+        g_UsbReport.m_reportId = UsbReportId;
+
+        for (uint8_t i = 0; i < COUNTOF(g_UsbReport.m_value); i++)
+        {
+            g_UsbReport.m_value[i] = status != Status::NoSignal ? g_Receiver.GetChannelValue(i) : 0x80;
+        }
+    }
+
+    void CreateEnhancedReport()
+    {
+        auto status = g_Receiver.GetStatus();
+
+        g_UsbEnhancedReport.m_reportId = UsbEnhancedReportId;
+        g_UsbEnhancedReport.m_status = status;
+
+        for (uint8_t i = 0; i < COUNTOF(g_UsbEnhancedReport.m_channelPulseWidth); i++)
+        {
+            g_UsbEnhancedReport.m_channelPulseWidth[i] = status != Status::NoSignal ? g_Receiver.GetChannelData(i) : 0;
+        }
+    }
+
+private:
+    friend UsbDevice;
+
     void OnEventConfigurationChanged()
     {
         ConfigureEndpoint(HidEndpoint, EndpointType::Interrupt, EndpointDirection::In, HidEndpointSize, EndpointBanks::Two);
@@ -370,18 +495,18 @@ public:
             {
             case UsbReportId:
             {
-                PrepareUsbReport();
+                CreateReport();
                 return WriteControlData(request.wLength, &g_UsbReport, sizeof(g_UsbReport), MemoryType::Ram);
             }
             case UsbEnhancedReportId:
             {
-                PrepareUsbEnhancedReport();
+                CreateEnhancedReport();
                 return WriteControlData(request.wLength, &g_UsbEnhancedReport, sizeof(g_UsbEnhancedReport), MemoryType::Ram);
             }
             case ConfigurationReportId:
             {
-                g_Receiver.m_Configuration.m_reportId = ConfigurationReportId;
-                return WriteControlData(request.wLength, &g_Receiver.m_Configuration, sizeof(g_Receiver.m_Configuration), MemoryType::Ram);
+                g_Configuration.m_reportId = ConfigurationReportId;
+                return WriteControlData(request.wLength, &g_Configuration, sizeof(g_Configuration), MemoryType::Ram);
             }
             default:
                 return RequestStatus::NotHandled;
@@ -394,7 +519,7 @@ public:
             {
             case ConfigurationReportId:
             {
-                auto status = ReadControlData(&g_Receiver.m_Configuration, sizeof(g_Receiver.m_Configuration));
+                auto status = ReadControlData(&g_Configuration, sizeof(g_Configuration));
                 g_Receiver.UpdateConfiguration();
                 return status;
             }
@@ -425,334 +550,52 @@ public:
         }
         else
         {
-            return base::ProcessRequest(request);
+            return UsbDevice::ProcessRequest(request);
         }
     }
-};
+} g_UsbDevice;
 
-UsbDevice usbDevice;
+//---------------------------------------------------------------------------
+
+ISR(TIMER1_CAPT_vect)
+{
+    g_PpmReceiver.OnInputCapture();
+}
+
+ISR(TIMER1_COMPA_vect)
+{
+    g_PpmReceiver.OnOutputCompareA();
+}
+
+ISR(TIMER1_COMPB_vect)
+{
+    g_PpmReceiver.OnOutputCompareB();
+}
+
+ISR(USART1_RX_vect)
+{
+    g_SrxlReceiver.OnDataReceived(UDR1);
+}
+
+ISR(TIMER3_COMPA_vect)
+{
+    g_SrxlReceiver.OnOutputCompareA();
+}
+
+ISR(TIMER3_COMPB_vect)
+{
+    g_SrxlReceiver.OnOutputCompareB();
+}
 
 ISR(USB_GEN_vect)
 {
-    usbDevice.OnGeneralInterrupt();
+    g_UsbDevice.OnGeneralInterrupt();
 }
 
 ISR(USB_COM_vect)
 {
-    usbDevice.OnEndpointInterrupt();
+    g_UsbDevice.OnEndpointInterrupt();
 }
-
-static void InitializeUsb(void)
-{
-    usbDevice.Attach();
-}
-
-static void ProcessUsb(void)
-{
-}
-
-static bool WriteUsbReport(void)
-{
-    if (usbDevice.IsConfigured())
-    {
-        UsbInEndpoint endpoint(1);
-        if (endpoint.IsWriteAllowed())
-        {
-            PrepareUsbReport();
-            endpoint.WriteData(&g_UsbReport, sizeof(g_UsbReport), MemoryType::Ram);
-            endpoint.CompleteTransfer();
-            return true;
-        }
-    }
-
-    return false;
-}
-
-#elif defined(USB_LUFA)
-
-void EVENT_USB_Device_ControlRequest(void)
-{
-    if (!Endpoint_IsSETUPReceived())
-        return;
-
-    switch (USB_ControlRequest.bRequest)
-    {
-    case HID_REQ_GetReport:
-        if (USB_ControlRequest.bmRequestType == (REQDIR_DEVICETOHOST | REQTYPE_CLASS | REQREC_INTERFACE))
-        {
-            uint8_t reportId = (USB_ControlRequest.wValue & 0xFF);
-            switch (reportId)
-            {
-            case UsbReportId:
-                PrepareUsbReport();
-                Endpoint_ClearSETUP();
-                Endpoint_Write_Control_Stream_LE(&g_UsbReport, sizeof(g_UsbReport));
-                Endpoint_ClearOUT();
-                break;
-            case UsbEnhancedReportId:
-                PrepareUsbEnhancedReport();
-                Endpoint_ClearSETUP();
-                Endpoint_Write_Control_Stream_LE(&g_UsbEnhancedReport, sizeof(g_UsbEnhancedReport));
-                Endpoint_ClearOUT();
-                break;
-            case ConfigurationReportId:
-                g_Receiver.m_Configuration.m_reportId = ConfigurationReportId;
-                Endpoint_ClearSETUP();
-                Endpoint_Write_Control_Stream_LE(&g_Receiver.m_Configuration, sizeof(g_Receiver.m_Configuration));
-                Endpoint_ClearOUT();
-                break;
-            }
-        }
-        break;
-    case HID_REQ_SetReport:
-        if (USB_ControlRequest.bmRequestType == (REQDIR_HOSTTODEVICE | REQTYPE_CLASS | REQREC_INTERFACE))
-        {
-            uint8_t reportId = (USB_ControlRequest.wValue & 0xFF);
-            switch (reportId)
-            {
-            case ConfigurationReportId:
-                Endpoint_ClearSETUP();
-                Endpoint_Read_Control_Stream_LE(&g_Receiver.m_Configuration, sizeof(g_Receiver.m_Configuration));
-                Endpoint_ClearIN();
-                g_Receiver.UpdateConfiguration();
-                break;
-            case LoadConfigurationDefaultsId:
-                Endpoint_ClearSETUP();
-                Endpoint_Read_Control_Stream_LE(&reportId, sizeof(reportId));
-                Endpoint_ClearIN();
-                LoadConfigurationDefaults();
-                break;
-            case ReadConfigurationFromEepromId:
-                Endpoint_ClearSETUP();
-                Endpoint_Read_Control_Stream_LE(&reportId, sizeof(reportId));
-                Endpoint_ClearIN();
-                ReadConfigurationFromEeprom();
-                break;
-            case WriteConfigurationToEepromId:
-                Endpoint_ClearSETUP();
-                Endpoint_Read_Control_Stream_LE(&reportId, sizeof(reportId));
-                Endpoint_ClearIN();
-                WriteConfigurationToEeprom();
-                break;
-            case JumpToBootloaderId:
-                Endpoint_ClearSETUP();
-                Endpoint_Read_Control_Stream_LE(&reportId, sizeof(reportId));
-                Endpoint_ClearIN();
-                JumpToBootloader();
-                break;
-            }
-        }
-        break;
-    }
-}
-
-void EVENT_USB_Device_ConfigurationChanged(void)
-{
-    Endpoint_ConfigureEndpoint(JOYSTICK_EPADDR, EP_TYPE_INTERRUPT, JOYSTICK_EPSIZE, 1);
-}
-
-static void InitializeUsb(void)
-{
-    USB_Init();
-}
-
-static void ProcessUsb(void)
-{
-    USB_USBTask();
-}
-
-
-static bool WriteUsbReport(void)
-{
-    if (USB_DeviceState != DEVICE_STATE_Configured)
-    {
-        return false;
-    }
-
-    Endpoint_SelectEndpoint(JOYSTICK_EPADDR);
-
-    if (!Endpoint_IsINReady())
-    {
-        return false;
-    }
-
-    PrepareUsbReport();
-    Endpoint_Write_Stream_LE(&g_UsbReport, sizeof(g_UsbReport), NULL);
-    Endpoint_ClearIN();
-
-    return true;
-}
-
-#elif defined(USB_V_USB)
-
-static uint8_t g_UsbWriteReportId;
-static uint8_t g_UsbWritePosition;
-static uint8_t g_UsbWriteBytesRemaining;
-
-static void SetupUsbWrite(uint8_t reportId, uint8_t transferSize)
-{
-    g_UsbWriteReportId = reportId;
-    g_UsbWritePosition = 0;
-    g_UsbWriteBytesRemaining = transferSize;
-}
-
-extern "C" uchar usbFunctionWrite(uchar* data, uchar length)
-{
-    if (g_UsbWriteBytesRemaining == 0)
-        return 1; // end of transfer
-
-    if (length > g_UsbWriteBytesRemaining)
-        length = g_UsbWriteBytesRemaining;
-
-    memcpy(reinterpret_cast<uint8_t*>(&g_Receiver.m_Configuration) + g_UsbWritePosition, data, length);
-    g_UsbWritePosition += length;
-    g_UsbWriteBytesRemaining -= length;
-
-    if (g_UsbWriteBytesRemaining == 0)
-    {
-        g_Receiver.UpdateConfiguration();
-    }
-
-    return g_UsbWriteBytesRemaining == 0; // return 1 if this was the last chunk
-}
-
-extern "C" usbMsgLen_t usbFunctionSetup(uchar data[8])
-{
-    static uint8_t idleRate;
-    const usbRequest_t* request = (const usbRequest_t*)data;
-
-    if ((request->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS)
-    {
-        if (request->bRequest == USBRQ_HID_GET_REPORT)
-        {
-            uint8_t reportId = request->wValue.bytes[0];
-            switch (reportId)
-            {
-            case UsbReportId:
-                PrepareUsbReport();
-                usbMsgPtr = (usbMsgPtr_t)&g_UsbReport;
-                return sizeof(g_UsbReport);
-            case UsbEnhancedReportId:
-                PrepareUsbEnhancedReport();
-                usbMsgPtr = (usbMsgPtr_t)&g_UsbEnhancedReport;
-                return sizeof(g_UsbEnhancedReport);
-            case ConfigurationReportId:
-                g_Receiver.m_Configuration.m_reportId = ConfigurationReportId;
-                usbMsgPtr = (usbMsgPtr_t)&g_Receiver.m_Configuration;
-                return sizeof(g_Receiver.m_Configuration);
-            default:
-                return 0;
-            }
-        }
-        else if (request->bRequest == USBRQ_HID_SET_REPORT)
-        {
-            uint8_t reportId = request->wValue.bytes[0];
-            switch (reportId)
-            {
-            case ConfigurationReportId:
-                SetupUsbWrite(reportId, sizeof(g_Receiver.m_Configuration));
-                return USB_NO_MSG;
-            case LoadConfigurationDefaultsId:
-                LoadConfigurationDefaults();
-                return 0;
-            case ReadConfigurationFromEepromId:
-                ReadConfigurationFromEeprom();
-                return 0;
-            case WriteConfigurationToEepromId:
-                WriteConfigurationToEeprom();
-                return 0;
-            case JumpToBootloaderId:
-                JumpToBootloader();
-                return 0;
-            default:
-                return 0;
-            }
-        }
-        else if (request->bRequest == USBRQ_HID_GET_IDLE)
-        {
-            usbMsgPtr = (usbMsgPtr_t)&idleRate;
-            return 1;
-        }
-        else if (request->bRequest == USBRQ_HID_SET_IDLE)
-        {
-            idleRate = request->wValue.bytes[1];
-        }
-    }
-
-    return 0;
-}
-
-static void InitializeUsb(void)
-{
-    usbInit();
-    usbDeviceDisconnect();
-
-    for (int i = 0; i < 256; i++)
-    {
-        wdt_reset();
-        _delay_ms(1);
-    }
-
-    usbDeviceConnect();
-}
-
-static void ProcessUsb(void)
-{
-    usbPoll();
-
-    if (usbInterruptIsReady())
-    {
-        PrepareUsbReport();
-        usbSetInterrupt((uchar*)&g_UsbReport, sizeof(g_UsbReport));
-    }
-}
-
-#endif
-
-//---------------------------------------------------------------------------
-
-static void InitializePorts(void)
-{
-    // LED_STATUS is output
-    LED_STATUS_DDR = _BV(LED_STATUS);
-
-    // Pull-up on PPM_SIGNAL
-    PPM_SIGNAL_PORT = _BV(PPM_SIGNAL);
-}
-
-//---------------------------------------------------------------------------
-
-#ifndef TIMER0_OVF_vect
-#define TIMER0_OVF_vect TIM0_OVF_vect
-#endif
-
-ISR(TIMER0_OVF_vect)
-{
-    g_Timer.OnOverflow();
-}
-
-//---------------------------------------------------------------------------
-
-#if 0
-static void BlinkStatusLed(bool good, uint32_t time)
-{
-    static uint32_t lastTime;
-
-    if (good)
-    {
-        uint32_t period = 800000;
-        if (time - lastTime > period)
-        {
-            lastTime = time;
-            LED_STATUS_PORT ^= _BV(LED_STATUS);
-        }
-    }
-    else
-    {
-        LED_STATUS_PORT &= ~_BV(LED_STATUS);
-    }
-}
-#endif
 
 //---------------------------------------------------------------------------
 
@@ -760,21 +603,20 @@ int main(void)
 {
     Watchdog::Enable(Watchdog::Timeout::Time250ms);
 
-    InitializePorts();
-    g_Timer.Initialize();
-    g_Receiver.Initialize();
-
 #if ATL_DEBUG
     StdStreams::SetupStdout([](char ch) { g_serial.WriteChar(ch); });
     g_serial.Open(1000000);
     g_serial.Write_P(PSTR("Hello from hidrcjoy!\n"));
     g_pinDebug10.Configure();
     g_pinDebug11.Configure();
+    g_pinDebug12.Configure();
 #endif
 
+    g_SignalPin.Configure(PinMode::InputPullup);
     g_BuiltinLed.Configure();
+    g_Receiver.Initialize();
+    g_UsbDevice.Attach();
 
-    InitializeUsb();
     ReadConfigurationFromEeprom();
     
     Interrupts::Enable();
@@ -783,32 +625,22 @@ int main(void)
     {
         Watchdog::Reset();
 
-        ProcessUsb();
-
         if (g_Receiver.IsReceiving())
         {
             if (g_Receiver.HasNewData())
             {
-                if (WriteUsbReport())
+                if (g_UsbDevice.WriteReport())
                 {
                     g_BuiltinLed.Toggle();
-                    g_Receiver.AcknowledgeNewData();
+                    g_Receiver.ClearNewData();
                 }
             }
         }
         else
         {
             g_BuiltinLed = true;
-            WriteUsbReport();
+            g_UsbDevice.WriteReport();
         }
-
-#if 0
-        uint32_t time = g_Timer.GetTimeInUs();
-        //g_Receiver.Update(time);
-        //g_PpmReceiver.Update();
-        //BlinkStatusLed(g_Receiver.GetStatus() != NoSignal, time);
-#endif
-        g_pinDebug11.Toggle();
     }
 
     return 0;

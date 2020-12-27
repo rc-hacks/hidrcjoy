@@ -6,84 +6,46 @@
 #pragma once
 #include <atl/autolock.h>
 #include <stdint.h>
-#include "Configuration.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
-class PpmReceiver
+template<class timer>
+class PpmReceiver : protected timer
 {
-    static const uint8_t minChannels = 4;
-    static const uint8_t maxTimeoutCounter = 25;
+    static const uint8_t minChannelCount = 4;
+    static const uint8_t maxChannelCount = 9;
+    static const uint16_t timeoutTickUs = 1000;
+    static const uint8_t timeoutTicks = 100;
 
 public:
+    void SetConfiguration(uint16_t minSyncPulseWidthUs, bool invertedSignal)
+    {
+        m_minSyncPulseWidth = timer::UsToTicks(minSyncPulseWidthUs);
+        m_invertedSignal = invertedSignal;
+        Initialize();
+    }
+
     void Initialize(void)
     {
-#if defined (__AVR_ATtiny85__)
-        USISR = 0x0F;
+        timer::Initialize(m_invertedSignal);
 
-        // Outputs disabled, enable counter overflow interrupt, external clock source
-        USICR = _BV(USIOIE) | _BV(USIWM1) | _BV(USIWM0) | _BV(USICS1);
-#elif defined (__AVR_ATtiny44__)
-        // On the FabISP board, the ICP pin is tied up for USB, so use the ADC comparator with ADC6 instead
-
-        // Analog comparator bandgap select, analog comparator input capture enable
-        ACSR = _BV(ACBG) | _BV(ACIC);
-
-        // Disable ADC
-        ADCSRA = 0;
-
-        // Analog comparator multiplexer enable
-        ADCSRB = _BV(ACME);
-
-        // ADC6
-        ADMUX = _BV(MUX2) | _BV(MUX1);
-
-        // Noise canceler, input capture rising edge, clk/8
-        TCCR1B = _BV(ICNC1) | _BV(CS11);
-#elif defined (__AVR_ATtiny167__) || defined (__AVR_ATmega32U4__)
-        // Noise canceler, input capture rising/falling edge, clk/8
-        TCCR1A = 0;
-        TCCR1B = _BV(ICNC1) | (m_invertedSignal ? 0 : _BV(ICES1)) | _BV(CS11);
-
-        // Set output compare to timeout
-        OCR1A = TCNT1 + m_minSyncPulseWidth;
-
-        //  Input Capture Interrupt Enable, Output Compare A Match Interrupt Enable
-        TIMSK1 = _BV(ICIE1) | _BV(OCIE1A);
-#else
-#error Unsupported MCU
-#endif
+        auto tcnt = timer::TCNT();
+        timer::OCRA() = tcnt + m_minSyncPulseWidth;
+        timer::OCRB() = tcnt + timer::UsToTicks(timeoutTickUs);
 
         Reset();
     }
 
-    void SetConfiguration(uint16_t minSyncPulseWidth, bool invertedSignal)
+    void Terminate(void)
     {
-        m_minSyncPulseWidth = UsToTicks(minSyncPulseWidth);
-        m_invertedSignal = invertedSignal;
-        ATL_DEBUG_PRINT("PpmReceiver::SetConfiguration(%u, %d)\n", minSyncPulseWidth, invertedSignal);
-        Initialize();
+        timer::Terminate();
     }
 
     void Reset()
     {
+        m_state = State::WaitingForSync;
         m_isReceiving = false;
-        m_skipFirstPulse = true;
-        m_hasSyncPulse = false;
         m_hasNewData = false;
-    }
-
-    void OnInputCapture()
-    {
-        uint16_t time = ICR1;
-        OCR1A = time + m_minSyncPulseWidth;
-        ProcessPulse(time);
-    }
-
-    void OnOutputCompare()
-    {
-        OCR1A += m_minSyncPulseWidth;
-        ProcessTimeout();
     }
 
     bool IsReceiving() const
@@ -96,125 +58,122 @@ public:
         return m_hasNewData;
     }
 
-    uint16_t GetChannelData(uint8_t channel) const
-    {
-        AutoLock lock;
-        return m_pulseWidthUs[channel];
-    }
-
-    void AcknowledgeNewData()
+    void ClearNewData()
     {
         m_hasNewData = false;
     }
 
-private:
-    void ProcessPulse(uint16_t time)
+    uint8_t GetChannelCount() const
     {
-        uint16_t diff = time - m_timeOfLastPulse;
-        m_timeOfLastPulse = time;
-
-        if (m_skipFirstPulse)
-        {
-            m_skipFirstPulse = false;
-        }
-        else if (diff >= m_minSyncPulseWidth)
-        {
-            m_currentChannel = 0;
-            m_hasSyncPulse = true;
-            g_pinDebug10 = true;
-        }
-        else if (m_hasSyncPulse)
-        {
-            if (m_currentChannel < Configuration::maxChannels)
-            {
-                m_pulseWidthTicks[m_currentChannel] = diff;
-                m_currentChannel++;
-            }
-        }
-
-        m_timeoutCounter = 0;
+        return m_channelCount;
     }
 
-    void ProcessTimeout()
+    uint16_t GetChannelData(uint8_t channel) const
     {
-        g_pinDebug10 = false;
-
-        if (m_hasSyncPulse && m_currentChannel >= Configuration::minChannels)
+        uint16_t channelData;
         {
-            for (uint8_t i = 0; i < Configuration::maxChannels; i++)
-            {
-                m_pulseWidthUs[i] = i < m_currentChannel ? TicksToUs(m_pulseWidthTicks[i]) : 0;
-            }
+            atl::AutoLock lock;
+            channelData = m_channelData[channel];
+        }
 
-            m_isReceiving = true;
-            m_hasSyncPulse = false;
-            m_hasNewData = true;
+        return timer::TicksToUs(channelData);
+    }
+
+    void OnInputCapture()
+    {
+        uint16_t time = timer::ICR();
+        timer::OCRA() = time + m_minSyncPulseWidth;
+        ProcessEdge(time);
+    }
+
+    void OnOutputCompareA()
+    {
+        ProcessSyncPause();
+    }
+
+    void OnOutputCompareB()
+    {
+        timer::OCRB() += timer::UsToTicks(timeoutTickUs);
+        ProcessSignalTimeout();
+    }
+
+private:
+    void ProcessEdge(uint16_t time)
+    {
+        uint16_t diff = time - m_timeOfLastEdge;
+        m_timeOfLastEdge = time;
+
+        if (m_state == State::SyncDetected)
+        {
+            m_state = State::ReceivingData;
+            m_currentChannel = 0;
+        }
+        else if (m_state == State::ReceivingData)
+        {
+            uint8_t currentChannel = m_currentChannel;
+            if (currentChannel < maxChannelCount)
+            {
+                m_pulseWidth[currentChannel] = diff;
+                m_currentChannel = currentChannel + 1;;
+            }
+        }
+    }
+
+    void ProcessSyncPause()
+    {
+        if (m_state == State::WaitingForSync)
+        {
+            m_state = State::SyncDetected;
+        }
+        else if (m_state == State::ReceivingData)
+        {
+            uint8_t channelCount = m_currentChannel;
+            if (channelCount >= minChannelCount)
+            {
+                for (uint8_t i = 0; i < maxChannelCount; i++)
+                {
+                    m_channelData[i] = i < channelCount ? m_pulseWidth[i] : 0;
+                }
+
+                m_channelCount = channelCount;
+                m_isReceiving = true;
+                m_hasNewData = true;
+                m_timeoutCounter = 0;
+                m_state = State::SyncDetected;
+            }
+        }
+    }
+
+    void ProcessSignalTimeout()
+    {
+        if (m_timeoutCounter < timeoutTicks)
+        {
+            m_timeoutCounter++;
         }
         else
         {
-            if (m_timeoutCounter < maxTimeoutCounter)
-            {
-                m_timeoutCounter++;
-            }
-            else
-            {
-                Reset();
-            }
+            m_timeoutCounter = 0;
+            Reset();
         }
     }
 
-    static uint16_t TicksToUs(uint16_t value)
-    {
-#if defined (__AVR_ATtiny85__)
-        return value * (64 * 2) / (2 * F_CPU / 1000000);
-#else
-        return value * 8 / (F_CPU / 1000000);
-#endif
-    }
-
-    static uint16_t UsToTicks(uint16_t value)
-    {
-#if defined (__AVR_ATtiny85__)
-        return value * (2 * F_CPU / 1000000) / (64 * 2);
-#else
-        return value * (F_CPU / 1000000) / 8;
-#endif
-    }
-
 private:
-    volatile bool m_isReceiving = false;
-    volatile bool m_skipFirstPulse = true;
-    volatile bool m_hasSyncPulse = false;
-    volatile bool m_hasNewData = false;
-    volatile uint8_t m_timeoutCounter = 0;
+    enum State : uint8_t
+    {
+        WaitingForSync,
+        SyncDetected,
+        ReceivingData,
+    };
+
+    volatile uint16_t m_pulseWidth[maxChannelCount] = {};
+    volatile uint16_t m_channelData[maxChannelCount] = {};
+    volatile uint16_t m_minSyncPulseWidth = 0;
+    volatile uint16_t m_timeOfLastEdge = 0;
     volatile uint8_t m_currentChannel = 0;
-    volatile uint16_t m_pulseWidthTicks[Configuration::maxChannels] = {};
-    volatile uint16_t m_pulseWidthUs[Configuration::maxChannels] = {};
-    uint16_t m_timeOfLastPulse = 0;
-    uint16_t m_minSyncPulseWidth = 0;
-    bool m_invertedSignal = false;
-} g_PpmReceiver;
-
-#if defined (__AVR_ATtiny85__)
-ISR(USI_OVF_vect)
-{
-    uint16_t ticks = g_Timer.GetTicksNoCli();
-    bool level = (PPM_SIGNAL_PIN & _BV(PPM_SIGNAL)) != 0;
-
-    // Clear counter overflow flag
-    USISR = _BV(USIOIF) | 0x0F;
-
-    sei();
-    g_PpmReceiver.OnPinChanged(level, ticks);
-}
-#elif defined (__AVR_ATtiny44__) || defined (__AVR_ATtiny167__) || defined (__AVR_ATmega32U4__)
-ISR(TIMER1_CAPT_vect)
-{
-    g_PpmReceiver.OnInputCapture();
-}
-
-ISR(TIMER1_COMPA_vect)
-{
-    g_PpmReceiver.OnOutputCompare();
-}
-#endif
+    volatile uint8_t m_channelCount = 0;
+    volatile uint8_t m_timeoutCounter = 0;
+    volatile State m_state = State::WaitingForSync;
+    volatile bool m_invertedSignal = false;
+    volatile bool m_isReceiving = false;
+    volatile bool m_hasNewData = false;
+};

@@ -407,20 +407,20 @@ private:
         m_stSlider2.SetPosition(0);
         m_stSlider3.SetPosition(0);
 
-        for (int i = 0; i < Configuration::maxChannels; i++)
+        for (int i = 0; i < Configuration::maxOutputChannels; i++)
         {
             CEdit(GetDlgItem(IDC_CHANNEL_WIDTH1 + i)).SetWindowText(_T(""));
             CEdit(GetDlgItem(IDC_CHANNEL_VALUE1 + i)).SetWindowText(_T(""));
         }
 
-        for (int i = 0; i < Configuration::maxChannels; i++)
+        for (int i = 0; i < Configuration::maxOutputChannels; i++)
         {
             CButton(GetDlgItem(IDC_CHANNEL1_POLARITY + i)).SetWindowText(_T("+"));
         }
 
-        for (int y = 0; y < Configuration::maxChannels; y++)
+        for (int y = 0; y < Configuration::maxOutputChannels; y++)
         {
-            for (int x = 0; x < Configuration::maxChannels; x++)
+            for (int x = 0; x < Configuration::maxInputChannels; x++)
             {
                 CButton(GetDlgItem(IDC_CHANNEL1_SOURCE1 + y * 10 + x)).SetState(false);
             }
@@ -462,7 +462,7 @@ private:
     {
         m_lockControlUpdate = true;
 
-        for (int i = 0; i < Configuration::maxChannels; i++)
+        for (int i = 0; i < Configuration::maxOutputChannels; i++)
         {
             CButton(GetDlgItem(IDC_CHANNEL1_POLARITY + i)).SetWindowText((pConfiguration->m_polarity & (1 << i)) == 0 ? _T("+") : _T("-"));
         }
@@ -474,11 +474,11 @@ private:
     {
         m_lockControlUpdate = true;
 
-        for (int i = 0; i < Configuration::maxChannels; i++)
+        for (int y = 0; y < Configuration::maxOutputChannels; y++)
         {
-            for (int j = 0; j < Configuration::maxChannels; j++)
+            for (int x = 0; x < Configuration::maxInputChannels; x++)
             {
-                CButton(GetDlgItem(IDC_CHANNEL1_SOURCE1 + 10 * i + j)).SetState(pConfiguration->m_mapping[i] == j);
+                CButton(GetDlgItem(IDC_CHANNEL1_SOURCE1 + 10 * y + x)).SetState(pConfiguration->m_mapping[y] == x);
             }
         }
 
@@ -497,7 +497,7 @@ private:
         m_stSlider2.SetPosition(ValueToPosition(report.m_value[5]));
         m_stSlider3.SetPosition(ValueToPosition(report.m_value[6]));
 
-        for (int i = 0; i < Configuration::maxChannels; i++)
+        for (int i = 0; i < Configuration::maxOutputChannels; i++)
         {
             CEdit(GetDlgItem(IDC_CHANNEL_VALUE1 + i)).SetWindowText(FormatString(_T("%d"), ValueToPosition(report.m_value[i])));
         }
@@ -514,7 +514,7 @@ private:
             m_stDeviceStatus.SetWindowText(FormatString(_T("Receiving data (%s)"), report.m_status == PpmSignal ? _T("PPM") : _T("SRXL")));
         }
 
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < Configuration::maxOutputChannels; i++)
         {
             CEdit(GetDlgItem(IDC_CHANNEL_WIDTH1 + i)).SetWindowText(FormatString(_T("%d"), report.m_channelPulseWidth[i]));
         }

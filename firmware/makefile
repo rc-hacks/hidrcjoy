@@ -16,12 +16,13 @@ AVRDUDE_FLAGS = -c avrisp2 -B 1
 include atl/boards.mk
 
 TARGET = hidrcjoy
-SOURCES = hidrcjoy.cpp Descriptors.c
+SOURCES = hidrcjoy.cpp
 CPPFLAGS += -D$(BOARD) -D$(USB) -Iatl/include
 
 ifeq ($(USB),USB_LUFA)
     ARCH = AVR8
     F_USB = $(F_CPU)
+    SOURCES += Descriptors.c
 
 ifndef LUFA_PATH
     $(error error : environment variable LUFA_PATH is not defined. LUFA_PATH must point to the LUFA folder 'lufa-LUFA-170418')
