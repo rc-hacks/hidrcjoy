@@ -16,8 +16,7 @@ class SrxlReceiver : protected timer, protected usart
     static const uint8_t headerV1 = 0xA1;
     static const uint8_t headerV2 = 0xA2;
     static const uint16_t syncPauseUs = 5000;
-    static const uint16_t timeoutTickUs = 1000;
-    static const uint8_t timeoutTicks = 25;
+    static const uint8_t timeoutMs = 100;
 
     enum FrameStatus : uint8_t
     {
@@ -32,12 +31,8 @@ public:
     void Initialize(void)
     {
         timer::Initialize();
+        timer::OCR() = timer::TCNT() + timer::UsToTicks(syncPauseUs);
         usart::Initialize(baudrate);
-
-        auto tcnt = timer::TCNT();
-        timer::OCRA() = tcnt + timer::UsToTicks(syncPauseUs);
-        timer::OCRB() = tcnt + timer::UsToTicks(timeoutTickUs);
-
         Reset();
     }
 
@@ -49,9 +44,25 @@ public:
 
     void Reset()
     {
-        m_state = State::WaitingForSync;
+        WaitForSync();
+
+        m_currentBank = 0;
+        m_bytesReceived = 0;
         m_isReceiving = false;
         m_hasNewData = false;
+    }
+
+    void RunTask()
+    {
+        if (m_timeoutCounter < timeoutMs)
+        {
+            m_timeoutCounter++;
+        }
+        else
+        {
+            m_timeoutCounter = 0;
+            Reset();
+        }
     }
 
     bool IsReceiving() const
@@ -74,32 +85,21 @@ public:
         return m_channelCount;
     }
 
-    uint16_t GetChannelData(uint8_t channel) const
+    uint16_t GetChannelPulseWidth(uint8_t channel) const
     {
-        uint16_t channelData;
-        {
-            atl::AutoLock lock;
-            channelData = m_channelData[channel];
-        }
-
-        return DataToUs(channelData);
+        auto frame = m_frame[m_currentBank ^ 1];
+        return channel < m_channelCount ? DataToUs(GetUInt16(frame, 1 + channel * 2)) : 0;
     }
 
     void OnDataReceived(uint8_t ch)
     {
-        timer::OCRA() = timer::TCNT() + timer::UsToTicks(syncPauseUs);
+        timer::OCR() = timer::TCNT() + timer::UsToTicks(syncPauseUs);
         AddByteToFrame(ch);
     }
 
-    void OnOutputCompareA()
+    void OnOutputCompare()
     {
         ProcessSyncPause();
-    }
-
-    void OnOutputCompareB()
-    {
-        timer::OCRB() += timer::UsToTicks(timeoutTickUs);
-        ProcessSignalTimeout();
     }
 
 private:
@@ -113,44 +113,44 @@ private:
 
         if (m_state == State::ReceivingData)
         {
-            if (m_bytesReceived < sizeof(m_frame))
+            if (m_bytesReceived < sizeof(m_frame[0]))
             {
-                m_frame[m_bytesReceived++] = ch;
+                auto frame = m_frame[m_currentBank];
+                frame[m_bytesReceived++] = ch;
 
-                if (m_frame[0] == headerV1 && m_bytesReceived == 1 + 12 * 2 + 2)
+                if (frame[0] == headerV1 && m_bytesReceived == 1 + 12 * 2 + 2)
                 {
-                    DecodeDataFrame(12);
+                    DecodeDataFrame(frame, 12);
                 }
-                else if (m_frame[0] == headerV2 && m_bytesReceived == 1 + 16 * 2 + 2)
+                else if (frame[0] == headerV2 && m_bytesReceived == 1 + 16 * 2 + 2)
                 {
-                    DecodeDataFrame(16);
+                    DecodeDataFrame(frame, 16);
                 }
-
-                m_timeoutCounter = 0;
             }
         }
     }
 
-    void DecodeDataFrame(uint8_t channelCount)
+    void DecodeDataFrame(const volatile uint8_t* frame, uint8_t channelCount)
     {
-        uint16_t crc = GetUInt16(m_frame, m_bytesReceived - 2);
-        if (CalculateCrc16(m_frame, m_bytesReceived - 2) == crc)
+        uint16_t crc = GetUInt16(frame, m_bytesReceived - 2);
+        if (CalculateCrc16(frame, m_bytesReceived - 2) == crc)
         {
-            for (uint8_t i = 0; i < channelCount; i++)
-            {
-                m_channelData[i] = GetUInt16(m_frame, 1 + i * 2);
-            }
-
-            m_channelCount = channelCount;
-            m_isReceiving = true;;
-            m_hasNewData = true;;
-            m_timeoutCounter = 0;
             m_state = State::SyncDetected;
+            m_timeoutCounter = 0;
+            m_currentBank ^= 1;
+            m_channelCount = channelCount;
+            m_isReceiving = true;
+            m_hasNewData = true;
         }
         else
         {
-            m_status = Error;
+            WaitForSync();
         }
+    }
+
+    void WaitForSync()
+    {
+        m_state = State::WaitingForSync;
     }
 
     void ProcessSyncPause()
@@ -158,20 +158,7 @@ private:
         m_state = State::SyncDetected;
     }
 
-    void ProcessSignalTimeout()
-    {
-        if (m_timeoutCounter < timeoutTicks)
-        {
-            m_timeoutCounter++;
-        }
-        else
-        {
-            m_timeoutCounter = 0;
-            Reset();
-        }
-    }
-
-    static uint16_t GetUInt16(const uint8_t* data, uint8_t index)
+    static uint16_t GetUInt16(const volatile uint8_t* data, uint8_t index)
     {
         return (data[index] << 8) | data[index + 1];
     }
@@ -181,7 +168,7 @@ private:
         return 800 + static_cast<uint16_t>(static_cast<uint32_t>(value & 0xFFF) * (2200 - 800) / 0x1000);
     }
 
-    static uint16_t CalculateCrc16(const uint8_t* data, uint8_t count)
+    static uint16_t CalculateCrc16(const volatile uint8_t* data, uint8_t count)
     {
         uint16_t crc = 0;
 
@@ -220,13 +207,12 @@ private:
         ReceivingData,
     };
 
-    uint8_t m_frame[1 + 16 * 2 + 2] = {};
-    volatile uint16_t m_channelData[maxChannelCount] = {};
-    volatile uint8_t m_status = 0;
+    volatile uint8_t m_frame[2][1 + 16 * 2 + 2] = {};
+    volatile State m_state = State::WaitingForSync;
     volatile uint8_t m_bytesReceived = 0;
+    volatile uint8_t m_currentBank = 0;
     volatile uint8_t m_channelCount = 0;
     volatile uint8_t m_timeoutCounter = 0;
-    volatile State m_state = State::WaitingForSync;
     volatile bool m_isReceiving = false;
     volatile bool m_hasNewData = false;
 };

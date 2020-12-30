@@ -1,5 +1,5 @@
 //
-// PpmReceiverTimer1.h
+// PcmReceiverTimer1B.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -9,43 +9,42 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-class PpmReceiverTimer1
+class PcmReceiverTimer1B
 {
 public:
     static void Initialize(bool invertedSignal)
     {
         // Noise canceler, input capture edge, clk/8
         TCCR1A = 0;
-        TCCR1B = _BV(ICNC1) | (invertedSignal ? 0 : _BV(ICES1)) | _BV(CS11);
-
-        // Set long timeout
-        OCR1A = OCR1B = TCNT1 - 1;
+        TCCR1B = (TCCR1B & ~(_BV(CS32) | _BV(CS31) | _BV(CS30))) | _BV(ICNC1) | (invertedSignal ? 0 : _BV(ICES1)) | _BV(CS11);
 
         // Clear pending IRQs
-        TIFR1 |= _BV(ICF1) | _BV(OCF1B) | _BV(OCF1A);
+        TIFR1 |= _BV(ICF1);
 
-        // Enable IRQs: Input Capture, Output Compare A/B
-        TIMSK1 = _BV(ICIE1) | _BV(OCIE1B) | _BV(OCIE1A);
+        // Enable IRQs: Input Capture
+        TIMSK1 |= _BV(ICIE1);
     }
 
     static void Terminate(void)
     {
-        TIMSK1 = 0;
+        TIMSK1 &= ~(_BV(ICIE1) | _BV(OCIE1B));
+    }
+
+    static void SetCaptureEdge(bool rising)
+    {
+        if (rising)
+        {
+            TCCR1B |= _BV(ICES1);
+        }
+        else
+        {
+            TCCR1B &= ~_BV(ICES1);
+        }
     }
 
     static volatile uint16_t& TCNT()
     {
         return TCNT1;
-    }
-
-    static volatile uint16_t& OCRA()
-    {
-        return OCR1A;
-    }
-
-    static volatile uint16_t& OCRB()
-    {
-        return OCR1B;
     }
 
     static volatile uint16_t& ICR()

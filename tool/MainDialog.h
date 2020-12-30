@@ -505,13 +505,30 @@ private:
 
     void UpdateEnhancedReportControls(const UsbEnhancedReport& report)
     {
-        if (report.m_status == NoSignal)
+        if (report.m_signalSource == SignalSource::None)
         {
             m_stDeviceStatus.SetWindowText(_T("Device found, no signal"));
         }
         else
         {
-            m_stDeviceStatus.SetWindowText(FormatString(_T("Receiving data (%s)"), report.m_status == PpmSignal ? _T("PPM") : _T("SRXL")));
+            CString strSignalSource;
+            switch (report.m_signalSource)
+            {
+            case SignalSource::PPM:
+                strSignalSource = FormatString(_T("PPM%u"), report.m_channelCount);
+                break;
+            case SignalSource::PCM:
+                strSignalSource = FormatString(_T("PCM%u"), report.m_channelCount);
+                break;
+            case SignalSource::SRXL:
+                strSignalSource = FormatString(_T("SRXL%u"), report.m_channelCount);
+                break;
+            default:
+                strSignalSource = _T("Unknown");
+                break;
+            }
+
+            m_stDeviceStatus.SetWindowText(FormatString(_T("Receiving data (%s)"), strSignalSource.GetString()));
         }
 
         for (int i = 0; i < Configuration::maxOutputChannels; i++)

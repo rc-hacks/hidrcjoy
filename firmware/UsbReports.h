@@ -9,7 +9,7 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-enum ReportIds
+enum ReportId
 {
     UnusedId,
     UsbReportId,
@@ -21,11 +21,12 @@ enum ReportIds
     JumpToBootloaderId,
 };
 
-enum Status
+enum class SignalSource : uint8_t
 {
-    NoSignal,
-    PpmSignal,
-    SrxlSignal,
+    None,
+    PPM,
+    PCM,
+    SRXL,
 };
 
 struct UsbReport
@@ -39,6 +40,8 @@ static_assert(sizeof(UsbReport) <= 8, "Report size for low-speed devices may not
 struct UsbEnhancedReport
 {
     uint8_t m_reportId;
-    uint8_t m_status;
+    SignalSource m_signalSource;
+    uint8_t m_channelCount;
+    uint8_t m_dummy;
     uint16_t m_channelPulseWidth[Configuration::maxOutputChannels];
 };

@@ -1,5 +1,5 @@
 //
-// SrxlReceiverTimer3.h
+// SrxlReceiverTimer1C.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -9,28 +9,28 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-class SrxlReceiverTimer3
+class SrxlReceiverTimer1C
 {
 public:
     static void Initialize()
     {
         // clk/8
-        TCCR3A = 0;
-        TCCR3B = _BV(CS31);
+        TCCR1A = 0;
+        TCCR1B = (TCCR1B & ~(_BV(CS32) | _BV(CS31) | _BV(CS30))) | _BV(CS31);
 
         // Set long timeout
-        OCR3B = OCR3A = TCNT3 - 1;
+        OCR1C = TCNT1 - 1;
 
         // Clear pending IRQs
-        TIFR3 |= _BV(OCF3B) | _BV(OCF3A);
+        TIFR1 |= _BV(OCF1C);
 
-        // Enable IRQs: Output Compare A/B
-        TIMSK3 = _BV(OCIE3B) | _BV(OCIE3A);
+        // Enable IRQs: Output Compare C
+        TIMSK1 = _BV(OCIE1C);
     }
 
     static void Terminate(void)
     {
-        TIMSK3 = 0;
+        TIMSK1 &= ~_BV(OCIE1C);
     }
 
     static volatile uint16_t& TCNT()
@@ -38,14 +38,9 @@ public:
         return TCNT3;
     }
 
-    static volatile uint16_t& OCRA()
+    static volatile uint16_t& OCR()
     {
-        return OCR3A;
-    }
-
-    static volatile uint16_t& OCRB()
-    {
-        return OCR3B;
+        return OCR1C;
     }
 
     static constexpr uint16_t TicksToUs(uint16_t value)

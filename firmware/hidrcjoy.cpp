@@ -3,13 +3,17 @@
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
+#define HIDRCJOY_PPM 0
+#define HIDRCJOY_PCM 1
+#define HIDRCJOY_SRXL 0
+#define HIDRCJOY_DEBUG 1
+
 #include <stdint.h>
 #include <string.h>
 #include <avr/eeprom.h>
 #include <avr/io.h>
 #include <util/delay.h>
 
-#define ATL_DEBUG 0
 #include <boards/arduino_micro.h>
 #include <atl/debug.h>
 #include <atl/interrupts.h>
@@ -18,10 +22,22 @@
 #include <atl/usb_device.h>
 #include <atl/usb_hid_spec.h>
 
+using namespace atl;
+
+#if HIDRCJOY_DEBUG
+DigitalOutputPin<10> g_pinDebug10;
+DigitalOutputPin<11> g_pinDebug11;
+DigitalOutputPin<12> g_pinDebug12;
+SerialT<SerialUnbuffered<SerialDriverUsart1>> g_serial;
+#endif
+
+#include "TaskTimer1.h"
 #include "PpmReceiver.h"
-#include "PpmReceiverTimer1.h"
+#include "PpmReceiverTimer1A.h"
+#include "PcmReceiver.h"
+#include "PcmReceiverTimer1B.h"
 #include "SrxlReceiver.h"
-#include "SrxlReceiverTimer3.h"
+#include "SrxlReceiverTimer1C.h"
 #include "SrxlReceiverUsart1.h"
 #include "UsbReports.h"
 
@@ -29,23 +45,22 @@
 
 #define COUNTOF(x) (sizeof(x) / sizeof(x[0]))
 
-using namespace atl;
-
 static BuiltinLed g_BuiltinLed;
 static DigitalInputPin<4> g_SignalPin;
-static PpmReceiver<PpmReceiverTimer1> g_PpmReceiver;
-static SrxlReceiver<SrxlReceiverTimer3, SrxlReceiverUsart1> g_SrxlReceiver;
+static TaskTimer1 g_TaskTimer;
+#if HIDRCJOY_PPM
+static PpmReceiver<PpmReceiverTimer1A> g_PpmReceiver;
+#endif
+#if HIDRCJOY_PCM
+static PcmReceiver<PcmReceiverTimer1B> g_PcmReceiver;
+#endif
+#if HIDRCJOY_SRXL
+static SrxlReceiver<SrxlReceiverTimer1C, SrxlReceiverUsart1> g_SrxlReceiver;
+#endif
 static UsbReport g_UsbReport;
 static UsbEnhancedReport g_UsbEnhancedReport;
 static Configuration g_Configuration;
 static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
-
-#if ATL_DEBUG
-DigitalOutputPin<10> g_pinDebug10;
-DigitalOutputPin<11> g_pinDebug11;
-DigitalOutputPin<12> g_pinDebug12;
-SerialT<SerialUnbuffered<SerialDriverUsart1>> g_serial;
-#endif
 
 //---------------------------------------------------------------------------
 
@@ -54,14 +69,57 @@ class Receiver
 public:
     void Initialize()
     {
+#if HIDRCJOY_PPM
         g_PpmReceiver.Initialize();
+#endif
+#if HIDRCJOY_PCM
+        g_PcmReceiver.Initialize();
+#endif
+#if HIDRCJOY_SRXL
         g_SrxlReceiver.Initialize();
+#endif
     }
 
     void Terminate()
     {
+#if HIDRCJOY_PPM
         g_PpmReceiver.Terminate();
+#endif
+#if HIDRCJOY_PCM
+        g_PcmReceiver.Terminate();
+#endif
+#if HIDRCJOY_SRXL
         g_SrxlReceiver.Terminate();
+#endif
+    }
+
+    void Update()
+    {
+        if (false)
+        {
+        }
+#if HIDRCJOY_PPM
+        else if (g_PpmReceiver.IsReceiving())
+        {
+            m_signalSource = SignalSource::PPM;
+        }
+#endif
+#if HIDRCJOY_PCM
+        else if (g_PcmReceiver.IsReceiving())
+        {
+            m_signalSource = SignalSource::PCM;
+        }
+#endif
+#if HIDRCJOY_SRXL
+        else if (g_SrxlReceiver.IsReceiving())
+        {
+            m_signalSource = SignalSource::SRXL;
+        }
+#endif
+        else
+        {
+            m_signalSource = SignalSource::None;
+        }
     }
 
     void LoadDefaultConfiguration()
@@ -81,11 +139,13 @@ public:
 
     void UpdateConfiguration()
     {
+#if HIDRCJOY_PPM
         auto minSyncPulseWidth = g_Configuration.m_minSyncPulseWidth;
         auto invertedSignal = (g_Configuration.m_flags & Configuration::Flags::InvertedSignal) != 0;
         ATL_DEBUG_PRINT("Configuration: MinSyncPulseWidth: %u\n", minSyncPulseWidth);
         ATL_DEBUG_PRINT("Configuration: InvertedSignal: %d\n", invertedSignal);
         g_PpmReceiver.SetConfiguration(minSyncPulseWidth, invertedSignal);
+#endif
     }
 
     bool IsValidConfiguration() const
@@ -116,19 +176,29 @@ public:
         return true;
     }
 
-    uint8_t GetStatus() const
+    SignalSource GetSignalSource() const
     {
-        if (g_PpmReceiver.IsReceiving())
+        return m_signalSource;
+    }
+
+    uint8_t GetChannelCount() const
+    {
+        switch (m_signalSource)
         {
-            return Status::PpmSignal;
-        }
-        else if (g_SrxlReceiver.IsReceiving())
-        {
-            return Status::SrxlSignal;
-        }
-        else
-        {
-            return Status::NoSignal;
+#if HIDRCJOY_PPM
+        case SignalSource::PPM:
+            return g_PpmReceiver.GetChannelCount();
+#endif
+#if HIDRCJOY_PCM
+        case SignalSource::PCM:
+            return g_PcmReceiver.GetChannelCount();
+#endif
+#if HIDRCJOY_SRXL
+        case SignalSource::SRXL:
+            return g_SrxlReceiver.GetChannelCount();
+#endif
+        default:
+            return 0;
         }
     }
 
@@ -136,55 +206,135 @@ public:
     {
         uint8_t index = g_Configuration.m_mapping[channel];
 
-        if (g_PpmReceiver.IsReceiving())
+        switch (m_signalSource)
         {
-            return index < g_PpmReceiver.GetChannelCount() ? g_PpmReceiver.GetChannelData(index) : g_Configuration.m_centerChannelPulseWidth;
-        }
-        else if (g_SrxlReceiver.IsReceiving())
-        {
-            return index < g_SrxlReceiver.GetChannelCount() ? g_SrxlReceiver.GetChannelData(index) : g_Configuration.m_centerChannelPulseWidth;
-        }
-        else
-        {
+#if HIDRCJOY_PPM
+        case SignalSource::PPM:
+            return g_PpmReceiver.GetChannelPulseWidth(index);
+#endif
+#if HIDRCJOY_PCM
+        case SignalSource::PCM:
+            return g_PcmReceiver.GetChannelData(index);
+#endif
+#if HIDRCJOY_SRXL
+        case SignalSource::SRXL:
+            return g_SrxlReceiver.GetChannelPulseWidth(index);
+#endif
+        default:
             return 0;
         }
     }
 
     uint8_t GetChannelValue(uint8_t channel) const
     {
-        return ScaleValue(channel, GetChannelData(channel));
+        uint8_t index = g_Configuration.m_mapping[channel];
+
+        switch (m_signalSource)
+        {
+#if HIDRCJOY_PPM
+        case SignalSource::PPM:
+            return PulseWidthToValue(channel, g_PpmReceiver.GetChannelPulseWidth(index));
+#endif
+#if HIDRCJOY_PCM
+        case SignalSource::PCM:
+            return ChannelDataToValue(channel, g_PcmReceiver.GetChannelData(index));
+#endif
+#if HIDRCJOY_SRXL
+        case SignalSource::SRXL:
+            return PulseWidthToValue(channel, g_SrxlReceiver.GetChannelPulseWidth(index));
+#endif
+        default:
+            return 0x80;
+        }
     }
 
     bool IsReceiving() const
     {
-        return g_PpmReceiver.IsReceiving();
+        switch (m_signalSource)
+        {
+#if HIDRCJOY_PPM
+        case SignalSource::PPM:
+            return g_PpmReceiver.IsReceiving();
+#endif
+#if HIDRCJOY_PCM
+        case SignalSource::PCM:
+            return g_PcmReceiver.IsReceiving();
+#endif
+#if HIDRCJOY_SRXL
+        case SignalSource::SRXL:
+            return g_SrxlReceiver.IsReceiving();
+#endif
+        default:
+            return false;
+        }
     }
 
     bool HasNewData() const
     {
-        return g_PpmReceiver.HasNewData();
+        switch (m_signalSource)
+        {
+#if HIDRCJOY_PPM
+        case SignalSource::PPM:
+            return g_PpmReceiver.HasNewData();
+#endif
+#if HIDRCJOY_PCM
+        case SignalSource::PCM:
+            return g_PcmReceiver.HasNewData();
+#endif
+#if HIDRCJOY_SRXL
+        case SignalSource::SRXL:
+            return g_SrxlReceiver.HasNewData();
+#endif
+        default:
+            return false;
+        }
     }
 
     void ClearNewData()
     {
+#if HIDRCJOY_PPM
         g_PpmReceiver.ClearNewData();
+#endif
+#if HIDRCJOY_PCM
+        g_PcmReceiver.ClearNewData();
+#endif
+#if HIDRCJOY_SRXL
+        g_SrxlReceiver.ClearNewData();
+#endif
     }
 
 private:
-    int16_t ScaleValue(uint8_t channel, int16_t data) const
+    uint8_t PulseWidthToValue(uint8_t channel, uint16_t value) const
     {
+        if (value == 0)
+            return 0x80;
+
         int16_t center = g_Configuration.m_centerChannelPulseWidth;
         int16_t range = g_Configuration.m_channelPulseWidthRange;
-        int16_t value = InvertValue(channel, data - center);
-        return SaturateValue(128 + (128 * (int32_t)value / range));
+        bool inverted = (g_Configuration.m_polarity & (1 << channel)) != 0;
+        return SaturateValue(ScaleValue(InvertValue(static_cast<int16_t>(value) - center, inverted), range));
     }
 
-    int16_t InvertValue(uint8_t channel, int16_t value) const
+    uint8_t ChannelDataToValue(uint8_t channel, uint16_t value) const
     {
-        return (g_Configuration.m_polarity & (1 << channel)) == 0 ? value : -value;
+        if (value == 0x80)
+            return 0x80;
+
+        bool inverted = (g_Configuration.m_polarity & (1 << channel)) != 0;
+        return SaturateValue(InvertValue(static_cast<int16_t>(value) - 0x80, inverted) + 0x80);
     }
 
-    uint8_t SaturateValue(int32_t value) const
+    static int16_t InvertValue(int16_t value, bool inverted)
+    {
+        return inverted ? -value : value;
+    }
+
+    static int16_t ScaleValue(int16_t value, int16_t range)
+    {
+        return static_cast<int16_t>(128 + (128 * static_cast<int32_t>(value) / range));
+    }
+
+    static uint8_t SaturateValue(int16_t value)
     {
         if (value < 0)
         {
@@ -199,6 +349,9 @@ private:
             return value;
         }
     }
+
+private:
+    SignalSource m_signalSource = SignalSource::None;
 } g_Receiver;
 
 //---------------------------------------------------------------------------
@@ -265,26 +418,26 @@ public:
 
     void CreateReport()
     {
-        auto status = g_Receiver.GetStatus();
-
         g_UsbReport.m_reportId = UsbReportId;
 
         for (uint8_t i = 0; i < COUNTOF(g_UsbReport.m_value); i++)
         {
-            g_UsbReport.m_value[i] = status != Status::NoSignal ? g_Receiver.GetChannelValue(i) : 0x80;
+            g_UsbReport.m_value[i] = g_Receiver.GetChannelValue(i);
         }
     }
 
     void CreateEnhancedReport()
     {
-        auto status = g_Receiver.GetStatus();
+        auto signalSource = g_Receiver.GetSignalSource();
+        auto channelCount = g_Receiver.GetChannelCount();
 
         g_UsbEnhancedReport.m_reportId = UsbEnhancedReportId;
-        g_UsbEnhancedReport.m_status = status;
+        g_UsbEnhancedReport.m_signalSource = signalSource;
+        g_UsbEnhancedReport.m_channelCount = channelCount;
 
         for (uint8_t i = 0; i < COUNTOF(g_UsbEnhancedReport.m_channelPulseWidth); i++)
         {
-            g_UsbEnhancedReport.m_channelPulseWidth[i] = status != Status::NoSignal ? g_Receiver.GetChannelData(i) : 0;
+            g_UsbEnhancedReport.m_channelPulseWidth[i] = g_Receiver.GetChannelData(i);
         }
     }
 
@@ -557,6 +710,7 @@ private:
 
 //---------------------------------------------------------------------------
 
+#if HIDRCJOY_PPM
 ISR(TIMER1_CAPT_vect)
 {
     g_PpmReceiver.OnInputCapture();
@@ -564,27 +718,42 @@ ISR(TIMER1_CAPT_vect)
 
 ISR(TIMER1_COMPA_vect)
 {
-    g_PpmReceiver.OnOutputCompareA();
+    g_PpmReceiver.OnOutputCompare();
 }
+#endif
 
-ISR(TIMER1_COMPB_vect)
+#if HIDRCJOY_PCM
+ISR(TIMER1_CAPT_vect)
 {
-    g_PpmReceiver.OnOutputCompareB();
+    g_PcmReceiver.OnInputCapture();
 }
+#endif
 
+#if HIDRCJOY_SRXL
 ISR(USART1_RX_vect)
 {
     g_SrxlReceiver.OnDataReceived(UDR1);
 }
 
+ISR(TIMER1_COMPC_vect)
+{
+    g_SrxlReceiver.OnOutputCompare();
+}
+#endif
+
 ISR(TIMER3_COMPA_vect)
 {
-    g_SrxlReceiver.OnOutputCompareA();
-}
+    g_TaskTimer.SetNextTick();
 
-ISR(TIMER3_COMPB_vect)
-{
-    g_SrxlReceiver.OnOutputCompareB();
+#if HIDRCJOY_PPM
+    g_PpmReceiver.RunTask();
+#endif
+#if HIDRCJOY_PCM
+    g_PcmReceiver.RunTask();
+#endif
+#if HIDRCJOY_SRXL
+    g_SrxlReceiver.RunTask();
+#endif
 }
 
 ISR(USB_GEN_vect)
@@ -603,7 +772,7 @@ int main(void)
 {
     Watchdog::Enable(Watchdog::Timeout::Time250ms);
 
-#if ATL_DEBUG
+#if HIDRCJOY_DEBUG
     StdStreams::SetupStdout([](char ch) { g_serial.WriteChar(ch); });
     g_serial.Open(1000000);
     g_serial.Write_P(PSTR("Hello from hidrcjoy!\n"));
@@ -612,6 +781,7 @@ int main(void)
     g_pinDebug12.Configure();
 #endif
 
+    g_TaskTimer.Initialize();
     g_SignalPin.Configure(PinMode::InputPullup);
     g_BuiltinLed.Configure();
     g_Receiver.Initialize();
@@ -625,6 +795,7 @@ int main(void)
     {
         Watchdog::Reset();
 
+        g_Receiver.Update();
         if (g_Receiver.IsReceiving())
         {
             if (g_Receiver.HasNewData())
