@@ -86,10 +86,6 @@ public:
 
     void OnInputCapture()
     {
-#if HIDRCJOY_DEBUG
-        g_pinDebug10.Toggle();
-#endif
-
         uint16_t time = timer::ICR();
         timer::OCR() = time + m_minSyncPulseWidth;
         ProcessEdge(time);
@@ -97,10 +93,6 @@ public:
 
     void OnOutputCompare()
     {
-#if HIDRCJOY_DEBUG
-        g_pinDebug11.Toggle();
-#endif
-
         ProcessSyncPause();
     }
 
@@ -130,7 +122,7 @@ private:
     {
         if (m_state == State::ReceivingData)
         {
-            FrameCompleted();
+            FinishFrame();
         }
 
         m_state = State::SyncDetected;
@@ -141,7 +133,7 @@ private:
         m_state = State::WaitingForSync;
     }
 
-    void FrameCompleted()
+    void FinishFrame()
     {
         uint8_t currentChannel = m_currentChannel;
         if (currentChannel >= minChannelCount)

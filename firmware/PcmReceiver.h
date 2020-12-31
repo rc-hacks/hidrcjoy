@@ -87,11 +87,6 @@ public:
         bool risingEdge = m_risingEdge;
         timer::SetCaptureEdge(!risingEdge);
         m_risingEdge = !risingEdge;
-
-#if HIDRCJOY_DEBUG
-        g_pinDebug10 = risingEdge;
-#endif
-
         uint16_t time = timer::ICR();
         ProcessEdge(time, risingEdge);
     }
@@ -105,6 +100,7 @@ private:
         {
             if (diff >= timer::UsToTicks(minSyncPulseWidthUs))
             {
+                FinishFrame();
                 m_state = State::SyncDetected;
             }
         }
@@ -114,10 +110,6 @@ private:
 
             if (m_state == State::SyncDetected)
             {
-#if HIDRCJOY_DEBUG
-                g_pinDebug11 = true;
-#endif
-
                 m_state = State::ReceivingData;
                 m_lastBits = 3;
                 m_bitCount = 0;
@@ -128,7 +120,6 @@ private:
             {
                 bool abort = false;
                 bool byteComplete = false;
-                //bool frameComplete = false;
                 uint8_t offset = 3 - m_lastBits;
                 uint8_t symbol = GetSymbol(diff);
                 if (symbol >= offset)
@@ -156,10 +147,6 @@ private:
                         m_lastBits = bits;
                     }
                 }
-                else
-                {
-                    abort = true;
-                }
 
                 if (abort)
                 {
@@ -174,8 +161,6 @@ private:
                         m_currentChannel = currentChannel + 1;
                     }
 
-                    FrameCompleted();
-
                     m_bitCount = 0;
                     m_currentByte = 0;
                 }
@@ -185,17 +170,12 @@ private:
 
     void WaitForSync()
     {
-#if HIDRCJOY_DEBUG
-        g_pinDebug10 = false;
-        g_pinDebug11 = false;
-#endif
-
         timer::SetCaptureEdge(false);
         m_risingEdge = false;
         m_state = State::WaitingForSync;
     }
 
-    void FrameCompleted()
+    void FinishFrame()
     {
         uint8_t currentChannel = m_currentChannel;
         if (currentChannel >= minChannelCount)
