@@ -84,27 +84,29 @@ public:
 
     void OnInputCapture()
     {
+        timer::ToggleCaptureEdge();
+        bool risingEdge = !timer::IsRisingEdge();
 #if HIDRCJOY_DEBUG
-        g_pinDebug10 = m_risingEdge;
-        g_pinDebug11.Toggle();
+        g_pinDebug10 = risingEdge;
 #endif
 
         uint16_t time = timer::ICR();
-        ProcessEdge(time);
+        ProcessEdge(time, risingEdge);
     }
 
 private:
-    void ProcessEdge(uint16_t time)
+    void ProcessEdge(uint16_t time, bool risingEdge)
     {
         uint16_t diff = time - m_timeOfLastEdge;
-        m_timeOfLastEdge = time;
 
         if (m_state == State::WaitingForSync)
         {
-            if (m_risingEdge)
+            m_timeOfLastEdge = time;
+
+            if (risingEdge)
             {
-                m_risingEdge = false;
-                timer::SetCaptureEdge(false);
+                //m_risingEdge = false;
+                //timer::SetCaptureEdge(false);
 
                 if (diff >= timer::UsToTicks(minSyncPulseWidthUs))
                 {
@@ -113,14 +115,17 @@ private:
             }
             else
             {
-                m_risingEdge = true;
-                timer::SetCaptureEdge(true);
+                //m_risingEdge = true;
+                //timer::SetCaptureEdge(true);
             }
         }
         else if (m_state == State::SyncDetected)
         {
+            if (risingEdge) return;
+            m_timeOfLastEdge = time;
+
 #if HIDRCJOY_DEBUG
-            g_pinDebug12 = true;
+            g_pinDebug11 = true;
 #endif
 
             m_state = State::ReceivingData;
@@ -131,8 +136,12 @@ private:
         }
         else if (m_state == State::ReceivingData)
         {
+            if (risingEdge) return;
+            m_timeOfLastEdge = time;
+
             bool abort = false;
             bool byteComplete = false;
+            bool frameComplete = false;
             uint8_t offset = 3 - m_lastBits;
             uint8_t symbol = GetSymbol(diff);
             if (symbol >= offset)
@@ -159,14 +168,10 @@ private:
 
                     m_lastBits = bits;
                 }
-                else
-                {
-                    byteComplete = true;
-                }
             }
             else
             {
-                byteComplete = true;
+                abort = true;
             }
 
             if (abort)
@@ -179,8 +184,9 @@ private:
                 if (currentChannel < maxChannelCount)
                 {
                     m_channelData[m_currentBank][currentChannel] = m_currentByte;
+                    m_currentChannel = currentChannel + 1;
 
-                    currentChannel++;
+                    uint8_t currentChannel = m_currentChannel;
                     if (currentChannel >= minChannelCount)
                     {
                         m_timeoutCounter = 0;
@@ -188,10 +194,9 @@ private:
                         m_channelCount = currentChannel;
                         m_isReceiving = true;
                         m_hasNewData = true;
+
                         WaitForSync();
                     }
-
-                    m_currentChannel = currentChannel;
                 }
 
                 m_bitCount = 0;
@@ -205,7 +210,6 @@ private:
 #if HIDRCJOY_DEBUG
         g_pinDebug10 = false;
         g_pinDebug11 = false;
-        g_pinDebug12 = false;
 #endif
 
         timer::SetCaptureEdge(false);

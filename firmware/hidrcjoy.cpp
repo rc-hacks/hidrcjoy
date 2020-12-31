@@ -756,6 +756,12 @@ ISR(TIMER3_COMPA_vect)
 #endif
 }
 
+ISR(TIMER3_COMPB_vect)
+{
+    OCR3B += 200;
+    g_pinDebug12.Toggle();
+}
+
 ISR(USB_GEN_vect)
 {
     g_UsbDevice.OnGeneralInterrupt();
@@ -786,6 +792,8 @@ int main(void)
     g_BuiltinLed.Configure();
     g_Receiver.Initialize();
     g_UsbDevice.Attach();
+
+    TIMSK3 |= _BV(OCIE3B);
 
     ReadConfigurationFromEeprom();
     
