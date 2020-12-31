@@ -50,21 +50,6 @@ public:
         }
     }
 
-    static void ToggleCaptureEdge()
-    {
-        TCCR1B ^= _BV(ICES1);
-    }
-
-    static bool IsRisingEdge()
-    {
-        return (TCCR1B & _BV(ICES1)) != 0;
-    }
-
-    static volatile uint16_t& TCNT()
-    {
-        return TCNT1;
-    }
-
     static volatile uint16_t& ICR()
     {
         return ICR1;

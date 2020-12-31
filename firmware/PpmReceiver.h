@@ -130,15 +130,7 @@ private:
     {
         if (m_state == State::ReceivingData)
         {
-            uint8_t currentChannel = m_currentChannel;
-            if (currentChannel >= minChannelCount)
-            {
-                m_timeoutCounter = 0;
-                m_currentBank ^= 1;
-                m_channelCount = currentChannel;
-                m_isReceiving = true;
-                m_hasNewData = true;
-            }
+            FrameCompleted();
         }
 
         m_state = State::SyncDetected;
@@ -147,6 +139,19 @@ private:
     void WaitForSync()
     {
         m_state = State::WaitingForSync;
+    }
+
+    void FrameCompleted()
+    {
+        uint8_t currentChannel = m_currentChannel;
+        if (currentChannel >= minChannelCount)
+        {
+            m_timeoutCounter = 0;
+            m_currentBank ^= 1;
+            m_channelCount = currentChannel;
+            m_isReceiving = true;
+            m_hasNewData = true;
+        }
     }
 
 private:

@@ -84,8 +84,10 @@ public:
 
     void OnInputCapture()
     {
-        timer::ToggleCaptureEdge();
-        bool risingEdge = !timer::IsRisingEdge();
+        bool risingEdge = m_risingEdge;
+        timer::SetCaptureEdge(!risingEdge);
+        m_risingEdge = !risingEdge;
+
 #if HIDRCJOY_DEBUG
         g_pinDebug10 = risingEdge;
 #endif
@@ -97,110 +99,86 @@ public:
 private:
     void ProcessEdge(uint16_t time, bool risingEdge)
     {
-        uint16_t diff = time - m_timeOfLastEdge;
+        uint16_t diff = time - m_timeOfLastFallingEdge;
 
-        if (m_state == State::WaitingForSync)
+        if (risingEdge)
         {
-            m_timeOfLastEdge = time;
-
-            if (risingEdge)
+            if (diff >= timer::UsToTicks(minSyncPulseWidthUs))
             {
-                //m_risingEdge = false;
-                //timer::SetCaptureEdge(false);
-
-                if (diff >= timer::UsToTicks(minSyncPulseWidthUs))
-                {
-                    m_state = State::SyncDetected;
-                }
-            }
-            else
-            {
-                //m_risingEdge = true;
-                //timer::SetCaptureEdge(true);
+                m_state = State::SyncDetected;
             }
         }
-        else if (m_state == State::SyncDetected)
+        else
         {
-            if (risingEdge) return;
-            m_timeOfLastEdge = time;
+            m_timeOfLastFallingEdge = time;
 
+            if (m_state == State::SyncDetected)
+            {
 #if HIDRCJOY_DEBUG
-            g_pinDebug11 = true;
+                g_pinDebug11 = true;
 #endif
 
-            m_state = State::ReceivingData;
-            m_lastBits = 3;
-            m_bitCount = 0;
-            m_currentByte = 0;
-            m_currentChannel = 0;
-        }
-        else if (m_state == State::ReceivingData)
-        {
-            if (risingEdge) return;
-            m_timeOfLastEdge = time;
-
-            bool abort = false;
-            bool byteComplete = false;
-            bool frameComplete = false;
-            uint8_t offset = 3 - m_lastBits;
-            uint8_t symbol = GetSymbol(diff);
-            if (symbol >= offset)
+                m_state = State::ReceivingData;
+                m_lastBits = 3;
+                m_bitCount = 0;
+                m_currentByte = 0;
+                m_currentChannel = 0;
+            }
+            else if (m_state == State::ReceivingData)
             {
-                uint8_t bits = symbol - offset;
-                if (bits <= 3)
+                bool abort = false;
+                bool byteComplete = false;
+                //bool frameComplete = false;
+                uint8_t offset = 3 - m_lastBits;
+                uint8_t symbol = GetSymbol(diff);
+                if (symbol >= offset)
                 {
-                    if (m_bitCount >= 8)
+                    uint8_t bits = symbol - offset;
+                    if (bits <= 3)
                     {
-                        if (CalculateChecksum(m_currentByte) == bits)
+                        if (m_bitCount >= 8)
                         {
-                            byteComplete = true;
+                            if (CalculateChecksum(m_currentByte) == bits)
+                            {
+                                byteComplete = true;
+                            }
+                            else
+                            {
+                                abort = true;
+                            }
                         }
                         else
                         {
-                            abort = true;
+                            m_bitCount += 2;
+                            m_currentByte = (m_currentByte << 2) | bits;
                         }
-                    }
-                    else
-                    {
-                        m_bitCount += 2;
-                        m_currentByte = (m_currentByte << 2) | bits;
-                    }
 
-                    m_lastBits = bits;
+                        m_lastBits = bits;
+                    }
                 }
-            }
-            else
-            {
-                abort = true;
-            }
-
-            if (abort)
-            {
-                WaitForSync();
-            }
-            else if (byteComplete)
-            {
-                uint8_t currentChannel = m_currentChannel;
-                if (currentChannel < maxChannelCount)
+                else
                 {
-                    m_channelData[m_currentBank][currentChannel] = m_currentByte;
-                    m_currentChannel = currentChannel + 1;
-
-                    uint8_t currentChannel = m_currentChannel;
-                    if (currentChannel >= minChannelCount)
-                    {
-                        m_timeoutCounter = 0;
-                        m_currentBank ^= 1;
-                        m_channelCount = currentChannel;
-                        m_isReceiving = true;
-                        m_hasNewData = true;
-
-                        WaitForSync();
-                    }
+                    abort = true;
                 }
 
-                m_bitCount = 0;
-                m_currentByte = 0;
+                if (abort)
+                {
+                    WaitForSync();
+                }
+                else if (byteComplete)
+                {
+                    uint8_t currentChannel = m_currentChannel;
+                    if (currentChannel < maxChannelCount)
+                    {
+                        m_channelData[m_currentBank][currentChannel] = m_currentByte;
+                        m_currentChannel = currentChannel + 1;
+                    }
+
+                    FrameCompleted();
+
+                    m_bitCount = 0;
+                    m_currentByte = 0;
+                }
             }
         }
     }
@@ -215,6 +193,21 @@ private:
         timer::SetCaptureEdge(false);
         m_risingEdge = false;
         m_state = State::WaitingForSync;
+    }
+
+    void FrameCompleted()
+    {
+        uint8_t currentChannel = m_currentChannel;
+        if (currentChannel >= minChannelCount)
+        {
+            m_timeoutCounter = 0;
+            m_currentBank ^= 1;
+            m_channelCount = currentChannel;
+            m_isReceiving = true;
+            m_hasNewData = true;
+
+            WaitForSync();
+        }
     }
 
     static uint8_t GetSymbol(uint16_t width)
@@ -296,7 +289,7 @@ private:
     };
 
     volatile uint8_t m_channelData[2][maxChannelCount] = {};
-    volatile uint16_t m_timeOfLastEdge = 0;
+    volatile uint16_t m_timeOfLastFallingEdge = 0;
     volatile State m_state = State::WaitingForSync;
     volatile uint8_t m_lastBits = 3;
     volatile uint8_t m_bitCount = 0;
