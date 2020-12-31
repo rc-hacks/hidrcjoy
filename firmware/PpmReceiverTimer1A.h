@@ -12,11 +12,22 @@
 class PpmReceiverTimer1A
 {
 public:
-    static void Initialize(bool invertedSignal)
+    static void Initialize(bool fallingEdge)
     {
-        // Noise canceler, input capture edge, clk/8
-        TCCR1A = 0;
-        TCCR1B = (TCCR1B & ~(_BV(CS32) | _BV(CS31) | _BV(CS30))) | _BV(ICNC1) | (invertedSignal ? 0 : _BV(ICES1)) | _BV(CS11);
+        uint8_t tccr1a = 0;
+        uint8_t tccr1b = 0;
+
+        // clk/8
+        tccr1b |= _BV(CS11);
+
+        //  Input Capture Noise Canceler
+        tccr1b |= _BV(ICNC1);
+
+        //  Input Capture Edge Select
+        tccr1b |= fallingEdge ? 0 : _BV(ICES1);
+
+        TCCR1A = tccr1a;
+        TCCR1B = tccr1b;
 
         // Set long timeout
         OCR1A = TCNT1 - 1;

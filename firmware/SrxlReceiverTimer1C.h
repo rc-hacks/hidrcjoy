@@ -14,9 +14,14 @@ class SrxlReceiverTimer1C
 public:
     static void Initialize()
     {
+        uint8_t tccr1a = 0;
+        uint8_t tccr1b = 0;
+
         // clk/8
-        TCCR1A = 0;
-        TCCR1B = (TCCR1B & ~(_BV(CS32) | _BV(CS31) | _BV(CS30))) | _BV(CS31);
+        tccr1b |= _BV(CS11);
+
+        TCCR1A = tccr1a;
+        TCCR1B = tccr1b;
 
         // Set long timeout
         OCR1C = TCNT1 - 1;
@@ -35,7 +40,7 @@ public:
 
     static volatile uint16_t& TCNT()
     {
-        return TCNT3;
+        return TCNT1;
     }
 
     static volatile uint16_t& OCR()

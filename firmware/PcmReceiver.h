@@ -25,7 +25,7 @@ public:
 
     void Initialize(void)
     {
-        timer::Initialize(m_invertedSignal);
+        timer::Initialize();
         Reset();
     }
 
@@ -85,7 +85,8 @@ public:
     void OnInputCapture()
     {
 #if HIDRCJOY_DEBUG
-        g_pinDebug10.Toggle();
+        g_pinDebug10 = m_risingEdge;
+        g_pinDebug11.Toggle();
 #endif
 
         uint16_t time = timer::ICR();
@@ -100,9 +101,9 @@ private:
 
         if (m_state == State::WaitingForSync)
         {
-            if (m_positiveEdge)
+            if (m_risingEdge)
             {
-                m_positiveEdge = false;
+                m_risingEdge = false;
                 timer::SetCaptureEdge(false);
 
                 if (diff >= timer::UsToTicks(minSyncPulseWidthUs))
@@ -112,94 +113,103 @@ private:
             }
             else
             {
-                m_positiveEdge = true;
+                m_risingEdge = true;
                 timer::SetCaptureEdge(true);
             }
         }
         else if (m_state == State::SyncDetected)
         {
 #if HIDRCJOY_DEBUG
-            g_pinDebug10 = false;
-            g_pinDebug11 = true;
+            g_pinDebug12 = true;
 #endif
 
             m_state = State::ReceivingData;
-            m_lastValue = 3;
+            m_lastBits = 3;
             m_bitCount = 0;
             m_currentByte = 0;
             m_currentChannel = 0;
         }
         else if (m_state == State::ReceivingData)
         {
-            bool complete = false;
-            uint8_t offset = 3 - m_lastValue;
+            bool abort = false;
+            bool byteComplete = false;
+            uint8_t offset = 3 - m_lastBits;
             uint8_t symbol = GetSymbol(diff);
             if (symbol >= offset)
             {
-                uint8_t value = symbol - offset;
-                if (value <= 3)
+                uint8_t bits = symbol - offset;
+                if (bits <= 3)
                 {
                     if (m_bitCount >= 8)
                     {
-                        uint8_t currentChannel = m_currentChannel;
-                        if (currentChannel < maxChannelCount)
+                        if (CalculateChecksum(m_currentByte) == bits)
                         {
-                            m_channelData[m_currentBank][currentChannel] = m_currentByte;
-                            m_currentChannel = currentChannel + 1;
+                            byteComplete = true;
                         }
-
-                        if (CalculateChecksum(m_currentByte) != value)
+                        else
                         {
-                            WaitForSync();
+                            abort = true;
                         }
-
-                        m_bitCount = 0;
-                        m_currentByte = 0;
                     }
                     else
                     {
                         m_bitCount += 2;
-                        m_currentByte = (m_currentByte << 2) | value;
+                        m_currentByte = (m_currentByte << 2) | bits;
                     }
 
-                    m_lastValue = value;
+                    m_lastBits = bits;
                 }
                 else
                 {
-                    complete = true;
+                    byteComplete = true;
                 }
             }
             else
             {
-                complete = true;
+                byteComplete = true;
             }
 
-            if (complete)
+            if (abort)
             {
-
-#if HIDRCJOY_DEBUG
-                g_pinDebug11 = false;
-#endif
-
+                WaitForSync();
+            }
+            else if (byteComplete)
+            {
                 uint8_t currentChannel = m_currentChannel;
-                if (currentChannel >= minChannelCount)
+                if (currentChannel < maxChannelCount)
                 {
-                    m_timeoutCounter = 0;
-                    m_currentBank ^= 1;
-                    m_channelCount = currentChannel;
-                    m_isReceiving = true;
-                    m_hasNewData = true;
+                    m_channelData[m_currentBank][currentChannel] = m_currentByte;
+
+                    currentChannel++;
+                    if (currentChannel >= minChannelCount)
+                    {
+                        m_timeoutCounter = 0;
+                        m_currentBank ^= 1;
+                        m_channelCount = currentChannel;
+                        m_isReceiving = true;
+                        m_hasNewData = true;
+                        WaitForSync();
+                    }
+
+                    m_currentChannel = currentChannel;
                 }
 
-                m_state = State::WaitingForSync;
+                m_bitCount = 0;
+                m_currentByte = 0;
             }
         }
     }
 
     void WaitForSync()
     {
+#if HIDRCJOY_DEBUG
+        g_pinDebug10 = false;
+        g_pinDebug11 = false;
+        g_pinDebug12 = false;
+#endif
+
         timer::SetCaptureEdge(false);
-        m_positiveEdge = false;
+        m_risingEdge = false;
         m_state = State::WaitingForSync;
     }
 
@@ -270,7 +280,7 @@ private:
 
     static uint8_t CalculateChecksum(uint8_t value)
     {
-        return (value >> 6) ^ (value >> 4) ^ (value >> 2) ^ (value >> 0);
+        return (3 ^ (value >> 6) ^ (value >> 4) ^ (value >> 2) ^ (value >> 0)) & 3;
     }
 
 private:
@@ -284,15 +294,14 @@ private:
     volatile uint8_t m_channelData[2][maxChannelCount] = {};
     volatile uint16_t m_timeOfLastEdge = 0;
     volatile State m_state = State::WaitingForSync;
-    volatile uint8_t m_lastValue = 3;
+    volatile uint8_t m_lastBits = 3;
     volatile uint8_t m_bitCount = 0;
     volatile uint8_t m_currentByte = 0;
     volatile uint8_t m_currentBank = 0;
     volatile uint8_t m_currentChannel = 0;
     volatile uint8_t m_channelCount = 0;
     volatile uint8_t m_timeoutCounter = 0;
-    volatile bool m_invertedSignal = false;
-    volatile bool m_positiveEdge = false;
+    volatile bool m_risingEdge = false;
     volatile bool m_isReceiving = false;
     volatile bool m_hasNewData = false;
 };

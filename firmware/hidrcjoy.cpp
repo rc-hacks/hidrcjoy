@@ -743,7 +743,7 @@ ISR(TIMER1_COMPC_vect)
 
 ISR(TIMER3_COMPA_vect)
 {
-    g_TaskTimer.SetNextTick();
+    g_TaskTimer.OnOutputCompare();
 
 #if HIDRCJOY_PPM
     g_PpmReceiver.RunTask();
