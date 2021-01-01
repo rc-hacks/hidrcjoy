@@ -185,8 +185,6 @@ private:
             m_channelCount = currentChannel;
             m_isReceiving = true;
             m_hasNewData = true;
-
-            WaitForSync();
         }
     }
 

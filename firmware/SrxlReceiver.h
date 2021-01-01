@@ -136,11 +136,7 @@ private:
         if (CalculateCrc16(frame, m_bytesReceived - 2) == crc)
         {
             m_state = State::SyncDetected;
-            m_timeoutCounter = 0;
-            m_currentBank ^= 1;
-            m_channelCount = channelCount;
-            m_isReceiving = true;
-            m_hasNewData = true;
+            FinishFrame(channelCount);
         }
         else
         {
@@ -156,6 +152,15 @@ private:
     void ProcessSyncPause()
     {
         m_state = State::SyncDetected;
+    }
+
+    void FinishFrame(uint8_t channelCount)
+    {
+        m_timeoutCounter = 0;
+        m_currentBank ^= 1;
+        m_channelCount = channelCount;
+        m_isReceiving = true;
+        m_hasNewData = true;
     }
 
     static uint16_t GetUInt16(const volatile uint8_t* data, uint8_t index)
