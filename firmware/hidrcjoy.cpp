@@ -57,10 +57,9 @@ static PcmReceiver<PcmReceiverTimer1B> g_PcmReceiver;
 #if HIDRCJOY_SRXL
 static SrxlReceiver<SrxlReceiverTimer1C, SrxlReceiverUsart1> g_SrxlReceiver;
 #endif
-static UsbReport g_UsbReport;
-static UsbEnhancedReport g_UsbEnhancedReport;
 static Configuration g_Configuration;
 static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
+static uint32_t g_updateRate;
 
 //---------------------------------------------------------------------------
 
@@ -399,15 +398,16 @@ class HidRcJoyDevice : public UsbDeviceT<HidRcJoyDevice>
     static const uint8_t HidEndpointSize = 8;
 
 public:
-    bool WriteReport(void)
+    bool WriteReport()
     {
         if (IsConfigured())
         {
             UsbInEndpoint endpoint(1);
             if (endpoint.IsWriteAllowed())
             {
-                CreateReport();
-                endpoint.WriteData(&g_UsbReport, sizeof(g_UsbReport), MemoryType::Ram);
+                UsbReport report;
+                CreateReport(report);
+                endpoint.WriteData(&report, sizeof(report), MemoryType::Ram);
                 endpoint.CompleteTransfer();
                 return true;
             }
@@ -416,28 +416,29 @@ public:
         return false;
     }
 
-    void CreateReport()
+    void CreateReport(UsbReport& report)
     {
-        g_UsbReport.m_reportId = UsbReportId;
+        report.m_reportId = UsbReportId;
 
-        for (uint8_t i = 0; i < COUNTOF(g_UsbReport.m_value); i++)
+        for (uint8_t i = 0; i < COUNTOF(report.m_value); i++)
         {
-            g_UsbReport.m_value[i] = g_Receiver.GetChannelValue(i);
+            report.m_value[i] = g_Receiver.GetChannelValue(i);
         }
     }
 
-    void CreateEnhancedReport()
+    void CreateEnhancedReport(UsbEnhancedReport& report)
     {
         auto signalSource = g_Receiver.GetSignalSource();
         auto channelCount = g_Receiver.GetChannelCount();
 
-        g_UsbEnhancedReport.m_reportId = UsbEnhancedReportId;
-        g_UsbEnhancedReport.m_signalSource = signalSource;
-        g_UsbEnhancedReport.m_channelCount = channelCount;
+        report.m_reportId = UsbEnhancedReportId;
+        report.m_signalSource = signalSource;
+        report.m_channelCount = channelCount;
+        report.m_updateRate = g_updateRate;
 
-        for (uint8_t i = 0; i < COUNTOF(g_UsbEnhancedReport.m_channelPulseWidth); i++)
+        for (uint8_t i = 0; i < COUNTOF(report.m_channelPulseWidth); i++)
         {
-            g_UsbEnhancedReport.m_channelPulseWidth[i] = g_Receiver.GetChannelData(i);
+            report.m_channelPulseWidth[i] = g_Receiver.GetChannelData(i);
         }
     }
 
@@ -648,13 +649,15 @@ private:
             {
             case UsbReportId:
             {
-                CreateReport();
-                return WriteControlData(request.wLength, &g_UsbReport, sizeof(g_UsbReport), MemoryType::Ram);
+                UsbReport report;
+                CreateReport(report);
+                return WriteControlData(request.wLength, &report, sizeof(report), MemoryType::Ram);
             }
             case UsbEnhancedReportId:
             {
-                CreateEnhancedReport();
-                return WriteControlData(request.wLength, &g_UsbEnhancedReport, sizeof(g_UsbEnhancedReport), MemoryType::Ram);
+                UsbEnhancedReport report;
+                CreateEnhancedReport(report);
+                return WriteControlData(request.wLength, &report, sizeof(report), MemoryType::Ram);
             }
             case ConfigurationReportId:
             {
@@ -799,6 +802,8 @@ int main(void)
     
     Interrupts::Enable();
 
+    uint32_t lastUpdate = 0;
+
     for (;;)
     {
         Watchdog::Reset();
@@ -810,6 +815,10 @@ int main(void)
             {
                 if (g_UsbDevice.WriteReport())
                 {
+                    uint32_t time = g_TaskTimer.GetMilliseconds();
+                    g_updateRate = time - lastUpdate;
+                    lastUpdate = time;
+
                     g_BuiltinLed.Toggle();
                     g_Receiver.ClearNewData();
                 }

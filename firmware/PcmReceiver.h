@@ -4,7 +4,6 @@
 //
 
 #pragma once
-#include <atl/autolock.h>
 #include <stdint.h>
 
 /////////////////////////////////////////////////////////////////////////////
@@ -36,8 +35,7 @@ public:
 
     void Reset()
     {
-        WaitForSync();
-
+        m_state = State::WaitingForSync;
         m_currentBank = 0;
         m_channelCount = 0;
         m_isReceiving = false;
@@ -118,61 +116,39 @@ private:
             }
             else if (m_state == State::ReceivingData)
             {
-                bool abort = false;
-                bool byteComplete = false;
-                uint8_t offset = 3 - m_lastBits;
                 uint8_t symbol = GetSymbol(diff);
-                if (symbol >= offset)
+                uint8_t bits = symbol - (3 - m_lastBits);
+                if (bits <= 3)
                 {
-                    uint8_t bits = symbol - offset;
-                    if (bits <= 3)
+                    if (m_bitCount >= 8)
                     {
-                        if (m_bitCount >= 8)
+                        if (CalculateChecksum(m_currentByte) == bits)
                         {
-                            if (CalculateChecksum(m_currentByte) == bits)
+                            uint8_t currentChannel = m_currentChannel;
+                            if (currentChannel < maxChannelCount)
                             {
-                                byteComplete = true;
+                                m_channelData[m_currentBank][currentChannel] = ~m_currentByte;
+                                m_currentChannel = currentChannel + 1;
                             }
-                            else
-                            {
-                                abort = true;
-                            }
+
+                            m_bitCount = 0;
+                            m_currentByte = 0;
                         }
                         else
                         {
-                            m_bitCount += 2;
-                            m_currentByte = (m_currentByte << 2) | bits;
+                            m_state = State::WaitingForSync;
                         }
-
-                        m_lastBits = bits;
                     }
-                }
-
-                if (abort)
-                {
-                    WaitForSync();
-                }
-                else if (byteComplete)
-                {
-                    uint8_t currentChannel = m_currentChannel;
-                    if (currentChannel < maxChannelCount)
+                    else
                     {
-                        m_channelData[m_currentBank][currentChannel] = m_currentByte;
-                        m_currentChannel = currentChannel + 1;
+                        m_bitCount += 2;
+                        m_currentByte = (m_currentByte << 2) | bits;
                     }
 
-                    m_bitCount = 0;
-                    m_currentByte = 0;
+                    m_lastBits = bits;
                 }
             }
         }
-    }
-
-    void WaitForSync()
-    {
-        timer::SetCaptureEdge(false);
-        m_risingEdge = false;
-        m_state = State::WaitingForSync;
     }
 
     void FinishFrame()

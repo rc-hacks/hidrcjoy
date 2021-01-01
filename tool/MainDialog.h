@@ -528,7 +528,8 @@ private:
                 break;
             }
 
-            m_stDeviceStatus.SetWindowText(FormatString(_T("Receiving data (%s)"), strSignalSource.GetString()));
+            uint32_t updateRate = report.m_updateRate > 0 ? 1000 / report.m_updateRate : 0;
+            m_stDeviceStatus.SetWindowText(FormatString(_T("Receiving data (%s) at %uHz"), strSignalSource.GetString(), updateRate));
         }
 
         for (int i = 0; i < Configuration::maxOutputChannels; i++)

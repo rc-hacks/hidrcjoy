@@ -43,5 +43,6 @@ struct UsbEnhancedReport
     SignalSource m_signalSource;
     uint8_t m_channelCount;
     uint8_t m_dummy;
+    uint32_t m_updateRate;
     uint16_t m_channelPulseWidth[Configuration::maxOutputChannels];
 };

@@ -4,7 +4,6 @@
 //
 
 #pragma once
-#include <atl/autolock.h>
 #include <stdint.h>
 
 /////////////////////////////////////////////////////////////////////////////
@@ -14,16 +13,10 @@ class PpmReceiver : protected timer
 {
     static const uint8_t minChannelCount = 4;
     static const uint8_t maxChannelCount = 9;
+    static const uint16_t defaultSyncPulseWidthUs = 3500;
     static const uint8_t timeoutMs = 100;
 
 public:
-    void SetConfiguration(uint16_t minSyncPulseWidthUs, bool invertedSignal)
-    {
-        m_minSyncPulseWidth = timer::UsToTicks(minSyncPulseWidthUs);
-        m_invertedSignal = invertedSignal;
-        Initialize();
-    }
-
     void Initialize(void)
     {
         timer::Initialize(m_invertedSignal);
@@ -36,10 +29,16 @@ public:
         timer::Terminate();
     }
 
+    void SetConfiguration(uint16_t minSyncPulseWidthUs, bool invertedSignal)
+    {
+        m_minSyncPulseWidth = timer::UsToTicks(minSyncPulseWidthUs);
+        m_invertedSignal = invertedSignal;
+        Initialize();
+    }
+
     void Reset()
     {
-        WaitForSync();
-
+        m_state = State::WaitingForSync;
         m_currentBank = 0;
         m_channelCount = 0;
         m_isReceiving = false;
@@ -128,11 +127,6 @@ private:
         m_state = State::SyncDetected;
     }
 
-    void WaitForSync()
-    {
-        m_state = State::WaitingForSync;
-    }
-
     void FinishFrame()
     {
         uint8_t currentChannel = m_currentChannel;
@@ -155,7 +149,7 @@ private:
     };
 
     volatile uint16_t m_pulseWidth[2][maxChannelCount] = {};
-    volatile uint16_t m_minSyncPulseWidth = 0;
+    volatile uint16_t m_minSyncPulseWidth = timer::UsToTicks(defaultSyncPulseWidthUs);
     volatile uint16_t m_timeOfLastEdge = 0;
     volatile State m_state = State::WaitingForSync;
     volatile uint8_t m_currentBank = 0;

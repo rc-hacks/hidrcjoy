@@ -15,7 +15,7 @@ public:
     static void Initialize()
     {
         uint8_t tccr1a = 0;
-        uint8_t tccr1b = 0;
+        uint8_t tccr1b = TCCR1B & ~(_BV(ICNC1) | _BV(ICES1));
 
         // clk/8
         tccr1b |= _BV(CS11);

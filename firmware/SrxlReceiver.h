@@ -44,8 +44,7 @@ public:
 
     void Reset()
     {
-        WaitForSync();
-
+        m_state = State::WaitingForSync;
         m_currentBank = 0;
         m_bytesReceived = 0;
         m_isReceiving = false;
@@ -140,13 +139,8 @@ private:
         }
         else
         {
-            WaitForSync();
+            m_state = State::WaitingForSync;
         }
-    }
-
-    void WaitForSync()
-    {
-        m_state = State::WaitingForSync;
     }
 
     void ProcessSyncPause()
