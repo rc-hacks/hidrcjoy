@@ -5,6 +5,7 @@
 
 #pragma once
 #include <stdint.h>
+#include <avr/interrupt.h>
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -19,7 +20,7 @@ class PpmReceiver : protected timer
 public:
     void Initialize(void)
     {
-        timer::Initialize(m_invertedSignal);
+        timer::Initialize();
         timer::OCR() = timer::TCNT() + m_minSyncPulseWidth;
         Reset();
     }
@@ -33,7 +34,6 @@ public:
     {
         m_minSyncPulseWidth = timer::UsToTicks(minSyncPulseWidthUs);
         m_invertedSignal = invertedSignal;
-        Initialize();
     }
 
     void Reset()
@@ -80,12 +80,22 @@ public:
 
     uint16_t GetChannelPulseWidth(uint8_t channel) const
     {
-        return channel < m_channelCount ? timer::TicksToUs(m_pulseWidth[m_currentBank ^ 1][channel]) : 0;
+        auto pulseWidth = &m_pulseWidth[m_currentBank ^ 1][channel];
+
+        uint16_t value;
+        {
+            atl::AutoLock lock;
+            value = *pulseWidth;
+        }
+
+        return channel < m_channelCount ? timer::TicksToUs(value) : 0;
     }
 
-    void OnInputCapture()
+    void OnInputCapture(uint16_t time, bool risingEdge)
     {
-        uint16_t time = timer::ICR();
+        if (risingEdge != m_invertedSignal)
+            return;
+
         timer::OCR() = time + m_minSyncPulseWidth;
         ProcessEdge(time);
     }
@@ -121,13 +131,13 @@ private:
     {
         if (m_state == State::ReceivingData)
         {
-            FinishFrame();
+            ProcessFrame();
         }
 
         m_state = State::SyncDetected;
     }
 
-    void FinishFrame()
+    void ProcessFrame()
     {
         uint8_t currentChannel = m_currentChannel;
         if (currentChannel >= minChannelCount)

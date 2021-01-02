@@ -1,5 +1,5 @@
 //
-// SrxlReceiverTimer1C.h
+// PpmReceiverTimer1B.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -9,7 +9,7 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-class SrxlReceiverTimer1C
+class PpmReceiverTimer1B
 {
 public:
     static void Initialize()
@@ -19,18 +19,18 @@ public:
         TCCR1B = _BV(CS11) | _BV(ICNC1);
 
         // Set long timeout
-        OCR1C = TCNT1 - 1;
+        OCR1B = TCNT1 - 1;
 
         // Clear pending IRQs
-        TIFR1 |= _BV(OCF1C);
+        TIFR1 |= _BV(ICF1) | _BV(OCF1B);
 
-        // Enable IRQs: Output Compare C
-        TIMSK1 |= _BV(OCIE1C);
+        // Enable IRQs: Input Capture, Output Compare B
+        TIMSK1 |= _BV(ICIE1) | _BV(OCIE1B);
     }
 
     static void Terminate(void)
     {
-        TIMSK1 &= ~_BV(OCIE1C);
+        TIMSK1 &= ~(_BV(ICIE1) | _BV(OCIE1B));
     }
 
     static volatile uint16_t& TCNT()
@@ -40,7 +40,7 @@ public:
 
     static volatile uint16_t& OCR()
     {
-        return OCR1C;
+        return OCR1B;
     }
 
     static constexpr uint16_t TicksToUs(uint16_t value)

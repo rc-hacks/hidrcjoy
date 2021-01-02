@@ -5,6 +5,7 @@
 
 #pragma once
 #include <stdint.h>
+#include <atl/autolock.h>
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -87,7 +88,15 @@ public:
     uint16_t GetChannelPulseWidth(uint8_t channel) const
     {
         auto frame = m_frame[m_currentBank ^ 1];
-        return channel < m_channelCount ? DataToUs(GetUInt16(frame, 1 + channel * 2)) : 0;
+        auto index = 1 + channel * 2;
+
+        uint16_t value;
+        {
+            atl::AutoLock lock;
+            value = GetUInt16(frame, index);
+        }
+
+        return channel < m_channelCount ? DataToUs(value) : 0;
     }
 
     void OnDataReceived(uint8_t ch)
@@ -135,7 +144,7 @@ private:
         if (CalculateCrc16(frame, m_bytesReceived - 2) == crc)
         {
             m_state = State::SyncDetected;
-            FinishFrame(channelCount);
+            ProcessFrame(channelCount);
         }
         else
         {
@@ -148,7 +157,7 @@ private:
         m_state = State::SyncDetected;
     }
 
-    void FinishFrame(uint8_t channelCount)
+    void ProcessFrame(uint8_t channelCount)
     {
         m_timeoutCounter = 0;
         m_currentBank ^= 1;

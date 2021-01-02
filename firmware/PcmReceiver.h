@@ -13,15 +13,10 @@ class PcmReceiver : protected timer
 {
     static const uint16_t minSyncPulseWidthUs = 750;
     static const uint8_t minChannelCount = 4;
-    static const uint8_t maxChannelCount = 9;
+    static const uint8_t maxChannelCount = 10;
     static const uint8_t timeoutMs = 100;
 
 public:
-    void SetConfiguration()
-    {
-        Initialize();
-    }
-
     void Initialize(void)
     {
         timer::Initialize();
@@ -80,12 +75,8 @@ public:
         return channel < m_channelCount ? m_channelData[m_currentBank ^ 1][channel] : 0x80;
     }
 
-    void OnInputCapture()
+    void OnInputCapture(uint16_t time, bool risingEdge)
     {
-        bool risingEdge = m_risingEdge;
-        timer::SetCaptureEdge(!risingEdge);
-        m_risingEdge = !risingEdge;
-        uint16_t time = timer::ICR();
         ProcessEdge(time, risingEdge);
     }
 
@@ -98,7 +89,6 @@ private:
         {
             if (diff >= timer::UsToTicks(minSyncPulseWidthUs))
             {
-                FinishFrame();
                 m_state = State::SyncDetected;
             }
         }
@@ -111,7 +101,7 @@ private:
                 m_state = State::ReceivingData;
                 m_lastBits = 3;
                 m_bitCount = 0;
-                m_currentByte = 0;
+                m_currentData = 0;
                 m_currentChannel = 0;
             }
             else if (m_state == State::ReceivingData)
@@ -122,17 +112,17 @@ private:
                 {
                     if (m_bitCount >= 8)
                     {
-                        if (CalculateChecksum(m_currentByte) == bits)
+                        if (CalculateChecksum(m_currentData) == bits)
                         {
                             uint8_t currentChannel = m_currentChannel;
                             if (currentChannel < maxChannelCount)
                             {
-                                m_channelData[m_currentBank][currentChannel] = ~m_currentByte;
+                                m_channelData[m_currentBank][currentChannel] = ~m_currentData;
                                 m_currentChannel = currentChannel + 1;
                             }
 
                             m_bitCount = 0;
-                            m_currentByte = 0;
+                            m_currentData = 0;
                         }
                         else
                         {
@@ -142,7 +132,12 @@ private:
                     else
                     {
                         m_bitCount += 2;
-                        m_currentByte = (m_currentByte << 2) | bits;
+                        m_currentData = (m_currentData << 2) | bits;
+
+                        if (m_currentChannel == 8 && m_bitCount == 4)
+                        {
+                            ProcessFrame();
+                        }
                     }
 
                     m_lastBits = bits;
@@ -151,17 +146,29 @@ private:
         }
     }
 
-    void FinishFrame()
+    void ProcessFrame()
     {
         uint8_t currentChannel = m_currentChannel;
-        if (currentChannel >= minChannelCount)
+
+        if (m_currentData == 0xC)
         {
-            m_timeoutCounter = 0;
-            m_currentBank ^= 1;
-            m_channelCount = currentChannel;
-            m_isReceiving = true;
-            m_hasNewData = true;
+            currentChannel += 2;
         }
+        else if (m_currentData == 0x9)
+        {
+            m_channelData[m_currentBank][8] = m_channelData[m_currentBank][6];
+            m_channelData[m_currentBank][9] = m_channelData[m_currentBank][7];
+            m_channelData[m_currentBank][6] = m_channelData[m_currentBank ^ 1][6];
+            m_channelData[m_currentBank][7] = m_channelData[m_currentBank ^ 1][7];
+            currentChannel += 2;
+        }
+
+        m_timeoutCounter = 0;
+        m_currentBank ^= 1;
+        m_channelCount = currentChannel;
+        m_isReceiving = true;
+        m_hasNewData = true;
+        m_state = State::WaitingForSync;
     }
 
     static uint8_t GetSymbol(uint16_t width)
@@ -247,7 +254,7 @@ private:
     volatile State m_state = State::WaitingForSync;
     volatile uint8_t m_lastBits = 3;
     volatile uint8_t m_bitCount = 0;
-    volatile uint8_t m_currentByte = 0;
+    volatile uint8_t m_currentData = 0;
     volatile uint8_t m_currentBank = 0;
     volatile uint8_t m_currentChannel = 0;
     volatile uint8_t m_channelCount = 0;

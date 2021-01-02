@@ -3,9 +3,9 @@
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
-#define HIDRCJOY_PPM 0
+#define HIDRCJOY_PPM 1
 #define HIDRCJOY_PCM 1
-#define HIDRCJOY_SRXL 0
+#define HIDRCJOY_SRXL 1
 #define HIDRCJOY_DEBUG 1
 
 #include <stdint.h>
@@ -33,9 +33,9 @@ SerialT<SerialUnbuffered<SerialDriverUsart1>> g_serial;
 
 #include "TaskTimer1.h"
 #include "PpmReceiver.h"
-#include "PpmReceiverTimer1A.h"
+#include "PpmReceiverTimer1B.h"
 #include "PcmReceiver.h"
-#include "PcmReceiverTimer1B.h"
+#include "PcmReceiverTimer1.h"
 #include "SrxlReceiver.h"
 #include "SrxlReceiverTimer1C.h"
 #include "SrxlReceiverUsart1.h"
@@ -49,10 +49,10 @@ static BuiltinLed g_BuiltinLed;
 static DigitalInputPin<4> g_SignalPin;
 static TaskTimer1 g_TaskTimer;
 #if HIDRCJOY_PPM
-static PpmReceiver<PpmReceiverTimer1A> g_PpmReceiver;
+static PpmReceiver<PpmReceiverTimer1B> g_PpmReceiver;
 #endif
 #if HIDRCJOY_PCM
-static PcmReceiver<PcmReceiverTimer1B> g_PcmReceiver;
+static PcmReceiver<PcmReceiverTimer1> g_PcmReceiver;
 #endif
 #if HIDRCJOY_SRXL
 static SrxlReceiver<SrxlReceiverTimer1C, SrxlReceiverUsart1> g_SrxlReceiver;
@@ -713,38 +713,24 @@ private:
 
 //---------------------------------------------------------------------------
 
-#if HIDRCJOY_PPM
+#if HIDRCJOY_PPM || HIDRCJOY_PCM
 ISR(TIMER1_CAPT_vect)
 {
-    g_PpmReceiver.OnInputCapture();
+    static bool risingEdge = false;
+    TaskTimer1::SetCaptureEdge(!risingEdge);
+    uint16_t time = TaskTimer1::ICR();
+
+#if HIDRCJOY_PPM
+    g_PpmReceiver.OnInputCapture(time, risingEdge);
+#endif
+#if HIDRCJOY_PCM
+    g_PcmReceiver.OnInputCapture(time, risingEdge);
+#endif
+
+    risingEdge = !risingEdge;
 }
 
 ISR(TIMER1_COMPA_vect)
-{
-    g_PpmReceiver.OnOutputCompare();
-}
-#endif
-
-#if HIDRCJOY_PCM
-ISR(TIMER1_CAPT_vect)
-{
-    g_PcmReceiver.OnInputCapture();
-}
-#endif
-
-#if HIDRCJOY_SRXL
-ISR(USART1_RX_vect)
-{
-    g_SrxlReceiver.OnDataReceived(UDR1);
-}
-
-ISR(TIMER1_COMPC_vect)
-{
-    g_SrxlReceiver.OnOutputCompare();
-}
-#endif
-
-ISR(TIMER3_COMPA_vect)
 {
     g_TaskTimer.OnOutputCompare();
 
@@ -759,11 +745,25 @@ ISR(TIMER3_COMPA_vect)
 #endif
 }
 
-ISR(TIMER3_COMPB_vect)
+ISR(TIMER1_COMPB_vect)
 {
-    OCR3B += 200;
-    g_pinDebug12.Toggle();
+    g_PpmReceiver.OnOutputCompare();
 }
+#endif
+
+#if HIDRCJOY_SRXL
+ISR(TIMER1_COMPC_vect)
+{
+    g_SrxlReceiver.OnOutputCompare();
+}
+#endif
+
+#if HIDRCJOY_SRXL
+ISR(USART1_RX_vect)
+{
+    g_SrxlReceiver.OnDataReceived(UDR1);
+}
+#endif
 
 ISR(USB_GEN_vect)
 {
@@ -795,8 +795,6 @@ int main(void)
     g_BuiltinLed.Configure();
     g_Receiver.Initialize();
     g_UsbDevice.Attach();
-
-    TIMSK3 |= _BV(OCIE3B);
 
     ReadConfigurationFromEeprom();
     

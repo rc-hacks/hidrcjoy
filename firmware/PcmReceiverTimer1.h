@@ -1,5 +1,5 @@
 //
-// PcmReceiverTimer1B.h
+// PcmReceiverTimer1.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -9,22 +9,14 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-class PcmReceiverTimer1B
+class PcmReceiverTimer1
 {
 public:
     static void Initialize()
     {
-        uint8_t tccr1a = 0;
-        uint8_t tccr1b = 0;
-
-        // clk/8
-        tccr1b |= _BV(CS11);
-
-        //  Input Capture Noise Canceler
-        tccr1b |= _BV(ICNC1);
-
-        TCCR1A = tccr1a;
-        TCCR1B = tccr1b;
+        // clk/8, Input Capture Noise Canceler
+        TCCR1A = 0;
+        TCCR1B = _BV(CS11) | _BV(ICNC1);
 
         // Clear pending IRQs
         TIFR1 |= _BV(ICF1);
@@ -36,23 +28,6 @@ public:
     static void Terminate(void)
     {
         TIMSK1 &= ~_BV(ICIE1);
-    }
-
-    static void SetCaptureEdge(bool risingEdge)
-    {
-        if (risingEdge)
-        {
-            TCCR1B |= _BV(ICES1);
-        }
-        else
-        {
-            TCCR1B &= ~_BV(ICES1);
-        }
-    }
-
-    static volatile uint16_t& ICR()
-    {
-        return ICR1;
     }
 
     static constexpr uint16_t TicksToUs(uint16_t value)
