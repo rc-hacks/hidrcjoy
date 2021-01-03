@@ -6,8 +6,8 @@
 BOARD ?= BOARD_ARDUINO_MICRO
 
 ATL_PATH = atl
-TARGET = hidrcjoy
-SOURCES = hidrcjoy.cpp
+TARGET = rc2usb
+SOURCES = rc2usb.cpp
 
 include atl/boards.mk
 include atl/avr8.mk

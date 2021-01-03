@@ -133,8 +133,8 @@ private:
         if (!HidD_GetAttributes(m_hDevice, &attributes))
             return AtlHresultFromLastError();
 
-        if (attributes.VendorID != m_vendorID || attributes.ProductID != m_productID)
-            return AtlHresultFromWin32(ERROR_INVALID_DATA);
+        //if (attributes.VendorID != m_vendorID || attributes.ProductID != m_productID)
+        //    return AtlHresultFromWin32(ERROR_INVALID_DATA);
 
         if (m_caps.UsagePage != HID_USAGE_PAGE_GENERIC || m_caps.Usage != HID_USAGE_GENERIC_JOYSTICK)
             return AtlHresultFromWin32(ERROR_INVALID_DATA);
