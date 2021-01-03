@@ -14,13 +14,13 @@
 #include <avr/io.h>
 #include <util/delay.h>
 
-#include <boards/arduino_micro.h>
 #include <atl/debug.h>
 #include <atl/interrupts.h>
 #include <atl/watchdog.h>
 #include <atl/std_streams.h>
 #include <atl/usb_device.h>
 #include <atl/usb_hid_spec.h>
+#include <boards/boards.h>
 
 using namespace atl;
 
@@ -213,7 +213,7 @@ public:
 #endif
 #if HIDRCJOY_PCM
         case SignalSource::PCM:
-            return g_PcmReceiver.GetChannelData(index);
+            return g_PcmReceiver.GetChannelPulseWidth(index);
 #endif
 #if HIDRCJOY_SRXL
         case SignalSource::SRXL:
@@ -236,7 +236,7 @@ public:
 #endif
 #if HIDRCJOY_PCM
         case SignalSource::PCM:
-            return ChannelDataToValue(channel, g_PcmReceiver.GetChannelData(index));
+            return PulseWidthToValue(channel, g_PcmReceiver.GetChannelPulseWidth(index));
 #endif
 #if HIDRCJOY_SRXL
         case SignalSource::SRXL:
@@ -312,15 +312,6 @@ private:
         int16_t range = g_Configuration.m_channelPulseWidthRange;
         bool inverted = (g_Configuration.m_polarity & (1 << channel)) != 0;
         return SaturateValue(ScaleValue(InvertValue(static_cast<int16_t>(value) - center, inverted), range));
-    }
-
-    uint8_t ChannelDataToValue(uint8_t channel, uint16_t value) const
-    {
-        if (value == 0x80)
-            return 0x80;
-
-        bool inverted = (g_Configuration.m_polarity & (1 << channel)) != 0;
-        return SaturateValue(InvertValue(static_cast<int16_t>(value) - 0x80, inverted) + 0x80);
     }
 
     static int16_t InvertValue(int16_t value, bool inverted)

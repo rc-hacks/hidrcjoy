@@ -72,7 +72,13 @@ public:
 
     uint8_t GetChannelData(uint8_t channel) const
     {
-        return channel < m_channelCount ? m_channelData[m_currentBank ^ 1][channel] : 0x80;
+        return channel < m_channelCount ? ~m_channelData[m_currentBank ^ 1][channel] : 0x80;
+    }
+
+    uint16_t GetChannelPulseWidth(uint8_t channel) const
+    {
+        uint16_t value = GetChannelData(channel);
+        return 1050 + 138 * value / 0x20;
     }
 
     void OnInputCapture(uint16_t time, bool risingEdge)
@@ -117,7 +123,7 @@ private:
                             uint8_t currentChannel = m_currentChannel;
                             if (currentChannel < maxChannelCount)
                             {
-                                m_channelData[m_currentBank][currentChannel] = ~m_currentData;
+                                m_channelData[m_currentBank][currentChannel] = m_currentData;
                                 m_currentChannel = currentChannel + 1;
                             }
 
