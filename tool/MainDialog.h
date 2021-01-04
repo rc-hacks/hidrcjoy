@@ -6,7 +6,7 @@
 #pragma once
 #include "resource.h"
 #include "AtlHelper.h"
-#include "HidRcJoy.h"
+#include "HidDevice.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -217,7 +217,7 @@ public:
 
     LRESULT OnDevicesSelChange(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        const auto& devices = m_hidrcjoy.GetDevices();
+        const auto& devices = m_collection.GetDevices();
         if (devices.size() > 0)
         {
             m_pDevice = devices[m_cbDevices.GetCurSel()].get();
@@ -346,14 +346,14 @@ private:
         m_cbDevices.ResetContent();
         m_pDevice = nullptr;
 
-        HRESULT hr = m_hidrcjoy.EnumerateDevices();
+        HRESULT hr = m_collection.EnumerateDevices();
         if (FAILED(hr))
         {
             m_stDeviceStatus.SetWindowText(FormatString(_T("Failed to enumerate devices: hr=0x08X"), hr));
             return hr;
         }
 
-        const auto& devices = m_hidrcjoy.GetDevices();
+        const auto& devices = m_collection.GetDevices();
 
         size_t count = devices.size();
         if (count == 0)
@@ -529,7 +529,7 @@ private:
             }
 
             uint32_t updateRate = report.m_updateRate > 0 ? 1000 / report.m_updateRate : 0;
-            m_stDeviceStatus.SetWindowText(FormatString(_T("Receiving data (%s) at %uHz"), strSignalSource.GetString(), updateRate));
+            m_stDeviceStatus.SetWindowText(FormatString(_T("Receiving data using %s at %uHz"), strSignalSource.GetString(), updateRate));
         }
 
         for (int i = 0; i < Configuration::maxOutputChannels; i++)
@@ -543,7 +543,7 @@ private:
         return value - 0x80;
     }
 
-    CString GetFriendlyDeviceName(const HidRcJoyDevice* pDevice)
+    CString GetFriendlyDeviceName(const HidDevice* pDevice)
     {
         return FormatString(_T("%s (%s)"), pDevice->GetProduct().c_str(), pDevice->GetManufacturer().c_str());
     }
@@ -568,7 +568,7 @@ private:
     }
 
 private:
-    HidRcJoy m_hidrcjoy;
-    HidRcJoyDevice* m_pDevice = nullptr;
+    HidDeviceCollection m_collection;
+    HidDevice* m_pDevice = nullptr;
     bool m_lockControlUpdate = false;
 };

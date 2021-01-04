@@ -18,9 +18,6 @@
     <ClInclude Include="stdafx.h">
       <Filter>2 Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HidRcJoy.h">
-      <Filter>2 Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>2 Header Files</Filter>
     </ClInclude>
@@ -44,18 +41,18 @@
     <ClCompile Include="stdafx.cpp">
       <Filter>1 Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="hidrcjoy.cpp">
+    <ClCompile Include="rc2usb.cpp">
       <Filter>1 Source Files</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="hidrcjoy.rc">
-      <Filter>3 Resource Files</Filter>
-    </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="res\version.rc2">
       <Filter>3 Resource Files</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="resource.rc">
+      <Filter>3 Resource Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

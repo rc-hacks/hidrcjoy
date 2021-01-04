@@ -1,5 +1,5 @@
 //
-// TaskTimer1.h
+// TaskTimer.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -9,7 +9,7 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-class TaskTimer1
+class TaskTimer
 {
     static const uint16_t TaskTickUs = 1000; // 1ms
 

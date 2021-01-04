@@ -5,6 +5,8 @@
 
 #pragma once
 #include "Buffer.h"
+#include "../firmware/Configuration.h"
+#include "../firmware/UsbReports.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -59,6 +61,53 @@ public:
 
     std::wstring GetProduct() const { return m_product; }
     std::wstring GetManufacturer() const { return m_manufacturer; }
+
+public:
+    Configuration* GetConfiguration() { return &m_configuration; }
+
+    void ReadReport(UsbReport& report)
+    {
+        auto buffer = Read();
+        std::memcpy(&report, buffer.data(), sizeof(report));
+    }
+
+    void ReadEnhancedReport(UsbEnhancedReport& report)
+    {
+        auto buffer = GetFeatureReport(UsbEnhancedReportId);
+        std::memcpy(&report, buffer.data(), sizeof(report));
+    }
+
+    void ReadConfiguration()
+    {
+        auto buffer = GetFeatureReport(ConfigurationReportId);
+        std::memcpy(&m_configuration, buffer.data(), sizeof(m_configuration));
+    }
+
+    void WriteConfiguration()
+    {
+        Buffer<uint8_t> buffer(reinterpret_cast<const uint8_t*>(&m_configuration), sizeof(m_configuration));
+        SetFeatureReport(ConfigurationReportId, buffer);
+    }
+
+    void LoadDefaultConfiguration()
+    {
+        SetFeatureReport(LoadConfigurationDefaultsId, Buffer<uint8_t>());
+    }
+
+    void ReadConfigurationFromEeprom()
+    {
+        SetFeatureReport(ReadConfigurationFromEepromId, Buffer<uint8_t>());
+    }
+
+    void WriteConfigurationToEeprom()
+    {
+        SetFeatureReport(WriteConfigurationToEepromId, Buffer<uint8_t>());
+    }
+
+    void JumpToBootloader()
+    {
+        SetFeatureReport(JumpToBootloaderId, Buffer<uint8_t>());
+    }
 
     Buffer<uint8_t> Read()
     {
@@ -142,11 +191,87 @@ private:
         return S_OK;
     }
 
-protected:
+private:
     HANDLE m_hDevice = nullptr;
     PHIDP_PREPARSED_DATA m_preparsedData = nullptr;
     HIDP_CAPS m_caps = {};
     std::wstring m_product;
     std::wstring m_manufacturer;
     std::wstring m_serialNumber;
+
+    Configuration m_configuration{};
+};
+
+//---------------------------------------------------------------------------
+
+class HidDeviceCollection
+{
+public:
+    HRESULT EnumerateDevices()
+    {
+        m_devices.clear();
+
+        GUID hidGuid = {};
+        HidD_GetHidGuid(&hidGuid);
+
+        HDEVINFO hDeviceInfoSet = SetupDiGetClassDevs(&hidGuid, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+        if (hDeviceInfoSet == nullptr)
+            return AtlHresultFromLastError();
+
+        HRESULT hr = S_OK;
+
+        DWORD index = 0;
+        while (true)
+        {
+            SP_DEVICE_INTERFACE_DATA deviceInterfaceData = { sizeof(SP_DEVICE_INTERFACE_DATA) };
+            if (!SetupDiEnumDeviceInterfaces(hDeviceInfoSet, nullptr, &hidGuid, index, &deviceInterfaceData))
+            {
+                DWORD dwError = GetLastError();
+                if (dwError != ERROR_NO_MORE_ITEMS)
+                {
+                    hr = AtlHresultFromWin32(dwError);
+                }
+
+                break;
+            }
+
+            DWORD dwRequiredSize = 0;
+            if (!SetupDiGetDeviceInterfaceDetail(hDeviceInfoSet, &deviceInterfaceData, nullptr, 0, &dwRequiredSize, nullptr))
+            {
+                DWORD dwError = GetLastError();
+                if (dwError != ERROR_INSUFFICIENT_BUFFER)
+                {
+                    hr = AtlHresultFromWin32(dwError);
+                    break;
+                }
+            }
+
+            std::unique_ptr<uint8_t[]> buffer(new uint8_t[dwRequiredSize]);
+
+            SP_DEVICE_INTERFACE_DETAIL_DATA* pDeviceInterfaceDetailData = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA*>(buffer.get());
+            std::memset(pDeviceInterfaceDetailData, 0, dwRequiredSize);
+            pDeviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+            if (SetupDiGetDeviceInterfaceDetail(hDeviceInfoSet, &deviceInterfaceData, pDeviceInterfaceDetailData, dwRequiredSize, &dwRequiredSize, nullptr))
+            {
+                std::unique_ptr<HidDevice> device = std::make_unique<HidDevice>();
+                hr = device->Open(pDeviceInterfaceDetailData->DevicePath);
+                if (SUCCEEDED(hr))
+                {
+                    m_devices.push_back(std::move(device));
+                }
+            }
+
+            index++;
+        }
+
+        SetupDiDestroyDeviceInfoList(hDeviceInfoSet);
+
+        return S_OK;
+    }
+
+    const std::vector<std::unique_ptr<HidDevice>>& GetDevices() const { return m_devices; }
+
+private:
+    std::vector<std::unique_ptr<HidDevice>> m_devices;
 };

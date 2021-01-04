@@ -22,8 +22,9 @@
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{E0DEFB49-3DBE-46E7-877D-83C11E04C4CF}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>hidrcjoy</RootNamespace>
+    <RootNamespace>rc2usb</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>rc2usb</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -148,14 +149,13 @@
     <ClInclude Include="AtlHelper.h" />
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="HidDevice.h" />
-    <ClInclude Include="HidRcJoy.h" />
     <ClInclude Include="MainDialog.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="Version.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="hidrcjoy.cpp" />
+    <ClCompile Include="rc2usb.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -164,7 +164,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="hidrcjoy.rc" />
+    <ResourceCompile Include="resource.rc" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\version.rc2">
