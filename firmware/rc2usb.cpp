@@ -26,7 +26,7 @@
 using namespace atl;
 
 #if RC2USB_PCINT
-DigitalOutputPin<9> g_SignalPin2;
+DigitalOutputPin<14> g_SignalPin2;
 #endif
 
 #if RC2USB_DEBUG
@@ -844,9 +844,9 @@ int main(void)
     g_SignalPin.Configure(PinMode::InputPullup);
 
 #if RC2USB_PCINT
-    // Configure D9 (PB5) as PCINT5
+    // Configure D14 (PB3) as PCINT3
     g_SignalPin2.Configure(PinMode::InputPullup);
-    PCMSK0 = _BV(PCINT5);
+    PCMSK0 = _BV(PCINT3);
     PCIFR = _BV(PCIF0);
     PCICR = _BV(PCIE0);
 #endif
@@ -883,7 +883,7 @@ int main(void)
                     g_updateRate = time - lastUpdate;
                     lastUpdate = time;
 
-                    g_BuiltinLed.Toggle();
+                    g_BuiltinLed = false;
                     g_Receiver.ClearNewData();
                 }
             }
