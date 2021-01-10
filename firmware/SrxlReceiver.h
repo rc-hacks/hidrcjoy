@@ -143,8 +143,8 @@ private:
         uint16_t crc = GetUInt16(frame, m_bytesReceived - 2);
         if (CalculateCrc16(frame, m_bytesReceived - 2) == crc)
         {
-            m_state = State::SyncDetected;
             ProcessFrame(channelCount);
+            m_state = State::SyncDetected;
         }
         else
         {

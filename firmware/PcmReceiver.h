@@ -143,6 +143,7 @@ private:
                         if (m_currentChannel == 8 && m_bitCount == 4)
                         {
                             ProcessFrame();
+                            m_state = State::WaitingForSync;
                         }
                     }
 
@@ -174,7 +175,6 @@ private:
         m_channelCount = currentChannel;
         m_isReceiving = true;
         m_hasNewData = true;
-        m_state = State::WaitingForSync;
     }
 
     static uint8_t GetSymbol(uint16_t width)

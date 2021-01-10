@@ -8,7 +8,6 @@
         "${env.AVR8_GNU_TOOLCHAIN}/avr/include/**",
         "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include",
         "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include-fixed",
-        "${env.LUFA_PATH}/..",
         "${workspaceRoot}/**"
       ],
       "defines": [
@@ -16,32 +15,10 @@
         "__STDC_LIMIT_MACROS",
         "__AVR_ATmega32U4__",
         "F_CPU=16000000",
-        "BOARD_ARDUINO_MICRO",
-        "USB_ATL",
-        "xUSB_LUFA",
-        "xUSE_STATIC_OPTIONS=\"(USB_DEVICE_OPT_FULLSPEED | USB_OPT_REG_ENABLED | USB_OPT_AUTO_PLL)\""
+        "BOARD_ARDUINO_MICRO"
       ],
       "intelliSenseMode": "linux-gcc-arm",
       "compilerSwitches": "-std=c++11"
-    } /*,
-    {
-      "name": "Digispark",
-      "includePath": [
-        "${env.AVR8_GNU_TOOLCHAIN}/avr/include/**",
-        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include",
-        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include-fixed",
-        "${workspaceRoot}/**"
-      ],
-      "defines": [
-        "__GNUC__=5",
-        "__STDC_LIMIT_MACROS",
-        "__AVR_ATtiny85__",
-        "F_CPU=16500000",
-        "BOARD_DIGISTUMP_DIGISPARK",
-        "USB_V_USB"
-      ],
-      "intelliSenseMode": "linux-gcc-arm",
-      "compilerSwitches": "-std=c++11"
-    }*/
+    }
   ]
 }
