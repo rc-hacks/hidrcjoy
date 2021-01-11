@@ -8,7 +8,7 @@
 #define RC2USB_PCM 1
 #define RC2USB_SRXL 1
 #define RC2USB_PCINT 1
-#define RC2USB_DEBUG 0
+#define RC2USB_DEBUG 1
 
 #include <stdint.h>
 #include <string.h>
@@ -25,14 +25,10 @@
 
 using namespace atl;
 
-#if RC2USB_PCINT
-DigitalOutputPin<14> g_SignalPin2;
-#endif
-
 #if RC2USB_DEBUG
-DigitalOutputPin<10> g_pinDebug10;
-DigitalOutputPin<11> g_pinDebug11;
-DigitalOutputPin<12> g_pinDebug12;
+static DigitalOutputPin<10> g_pinDebug10;
+static DigitalOutputPin<11> g_pinDebug11;
+static DigitalOutputPin<12> g_pinDebug12;
 #endif
 
 #include "TaskTimer.h"
@@ -50,7 +46,8 @@ DigitalOutputPin<12> g_pinDebug12;
 #define COUNTOF(x) (sizeof(x) / sizeof(x[0]))
 
 static BuiltinLed g_BuiltinLed;
-static DigitalInputPin<4> g_SignalPin;
+static DigitalInputPin<4> g_SignalCapturePin;
+static DigitalInputPin<14> g_SignalChangePin;
 static TaskTimer g_TaskTimer;
 static Configuration g_Configuration;
 static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
@@ -66,13 +63,6 @@ static PcmReceiver<PcmReceiverTimer1> g_PcmReceiver;
 
 #if RC2USB_SRXL
 static SrxlReceiver<SrxlReceiverTimer1C, SrxlReceiverUsart1> g_SrxlReceiver;
-#endif
-
-#if RC2USB_DEBUG
-static Serial g_Serial;
-DigitalOutputPin<10> g_pinDebug10;
-DigitalOutputPin<11> g_pinDebug11;
-DigitalOutputPin<12> g_pinDebug12;
 #endif
 
 //---------------------------------------------------------------------------
@@ -766,6 +756,10 @@ ISR(TIMER1_CAPT_vect)
     TaskTimer::SetCaptureEdge(!risingEdge);
     uint16_t time = TaskTimer::ICR();
 
+#if RC2USB_DEBUG
+    g_pinDebug10.Toggle();
+#endif
+
 #if RC2USB_PPM
     g_PpmReceiver.OnInputCapture(time, risingEdge);
 #endif
@@ -781,7 +775,11 @@ ISR(TIMER1_CAPT_vect)
 ISR(PCINT0_vect)
 {
     uint16_t time = TaskTimer::TCNT();
-    bool risingEdge = g_SignalPin2;
+    bool risingEdge = g_SignalChangePin;
+
+#if RC2USB_DEBUG
+    g_pinDebug11.Toggle();
+#endif
 
 #if RC2USB_PPM
     g_PpmReceiver.OnInputCapture(time, risingEdge);
@@ -795,6 +793,10 @@ ISR(PCINT0_vect)
 ISR(TIMER1_COMPA_vect)
 {
     g_TaskTimer.OnOutputCompare();
+
+#if RC2USB_DEBUG
+    g_pinDebug12.Toggle();
+#endif
 
 #if RC2USB_PPM
     g_PpmReceiver.RunTask();
@@ -845,16 +847,14 @@ int main(void)
     Watchdog::Enable(Watchdog::Timeout::Time250ms);
 
 #if RC2USB_DEBUG
-    //StdStreams::SetupStdout([](char ch) { g_UsbDevice.WriteChar(ch); });
-    StdStreams::SetupStdout([](char ch) { g_Serial.WriteChar(ch); });
-    g_Serial.Open(1000000);
+    StdStreams::SetupStdout([](char ch) { g_UsbDevice.WriteChar(ch); });
 #endif
 
-    g_SignalPin.Configure(PinMode::InputPullup);
+    g_SignalCapturePin.Configure(PinMode::InputPullup);
 
 #if RC2USB_PCINT
     // Configure D14 (PB3) as PCINT3
-    g_SignalPin2.Configure(PinMode::InputPullup);
+    g_SignalChangePin.Configure(PinMode::InputPullup);
     PCMSK0 = _BV(PCINT3);
     PCIFR = _BV(PCIF0);
     PCICR = _BV(PCIE0);
@@ -875,6 +875,10 @@ int main(void)
     ReadConfigurationFromEeprom();
     
     Interrupts::Enable();
+
+#if RC2USB_DEBUG
+    printf_P(PSTR("Hello from rc2usb"));
+#endif
 
     uint32_t lastUpdate = 0;
     for (;;)
