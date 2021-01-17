@@ -112,10 +112,6 @@ protected:
     {
     }
 
-    void OnError()
-    {
-    }
-
 private:
     void ProcessEdge(uint16_t time)
     {

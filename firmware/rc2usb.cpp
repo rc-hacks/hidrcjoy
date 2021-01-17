@@ -7,9 +7,9 @@
 #define RC2USB_PPM 1
 #define RC2USB_PCM 1
 #define RC2USB_SRXL 1
-#define RC2USB_PCINT 1
+#define RC2USB_PCINT 0
 #define RC2USB_ACIC_A0 1
-#define RC2USB_DEBUG 1
+#define RC2USB_DEBUG 0
 
 #include <stdint.h>
 #include <string.h>
@@ -41,9 +41,9 @@ using namespace atl;
 #define COUNTOF(x) (sizeof(x) / sizeof(x[0]))
 
 #if RC2USB_DEBUG
+static DigitalOutputPin<9> g_pinDebug9;
 static DigitalOutputPin<10> g_pinDebug10;
 static DigitalOutputPin<11> g_pinDebug11;
-static DigitalOutputPin<12> g_pinDebug12;
 #endif
 
 static BuiltinLed g_BuiltinLed;
@@ -769,15 +769,21 @@ ISR(TIMER1_CAPT_vect)
     TaskTimer::SetCaptureEdge(!risingEdge);
     uint16_t time = TaskTimer::ICR();
 
+#if RC2USB_ACIC_A0
+    bool capturedEdge = !risingEdge;
+#else
+    bool capturedEdge = risingEdge;
+#endif
+
 #if RC2USB_DEBUG
-    g_pinDebug10.Toggle();
+    g_pinDebug9 = capturedEdge;
 #endif
 
 #if RC2USB_PPM
-    g_PpmReceiver.OnInputCapture(time, risingEdge);
+    g_PpmReceiver.OnInputCapture(time, capturedEdge);
 #endif
 #if RC2USB_PCM
-    g_PcmReceiver.OnInputCapture(time, risingEdge);
+    g_PcmReceiver.OnInputCapture(time, capturedEdge);
 #endif
 
     risingEdge = !risingEdge;
@@ -791,7 +797,7 @@ ISR(PCINT0_vect)
     bool risingEdge = g_SignalChangePin;
 
 #if RC2USB_DEBUG
-    g_pinDebug11.Toggle();
+    g_pinDebug10 = risingEdge;
 #endif
 
 #if RC2USB_PPM
@@ -878,9 +884,9 @@ int main(void)
 #endif
 
 #if RC2USB_DEBUG
+    g_pinDebug9.Configure();
     g_pinDebug10.Configure();
     g_pinDebug11.Configure();
-    g_pinDebug12.Configure();
 #endif
 
     g_BuiltinLed.Configure();
@@ -933,7 +939,7 @@ int main(void)
         }
 
 #if RC2USB_DEBUG
-        g_pinDebug12.Toggle();
+        g_pinDebug11.Toggle();
 #endif
     }
 

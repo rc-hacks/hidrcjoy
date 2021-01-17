@@ -109,6 +109,7 @@ private:
             if (diff >= timer::UsToTicks(minSyncPulseWidthUs))
             {
                 m_state = State::SyncDetected;
+                static_cast<T*>(this)->OnSyncDetected();
             }
         }
         else
