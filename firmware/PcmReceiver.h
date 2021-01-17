@@ -8,8 +8,8 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-template<class timer>
-class PcmReceiver : protected timer
+template<typename T, typename timer>
+class PcmReceiverT
 {
     static const uint16_t minSyncPulseWidthUs = 750;
     static const uint8_t minChannelCount = 4;
@@ -86,6 +86,19 @@ public:
         ProcessEdge(time, risingEdge);
     }
 
+protected:
+    void OnSyncDetected()
+    {
+    }
+
+    void OnFrameReceived()
+    {
+    }
+
+    void OnError()
+    {
+    }
+
 private:
     void ProcessEdge(uint16_t time, bool risingEdge)
     {
@@ -133,6 +146,7 @@ private:
                         else
                         {
                             m_state = State::WaitingForSync;
+                            static_cast<T*>(this)->OnError();
                         }
                     }
                     else
@@ -155,26 +169,25 @@ private:
 
     void ProcessFrame()
     {
-        uint8_t currentChannel = m_currentChannel;
-
         if (m_currentData == 0xC)
         {
-            currentChannel += 2;
+            // Value 6 and 7 contains channel 6 and 7.
         }
         else if (m_currentData == 0x9)
         {
+            // Value 6 and 7 contains channel 8 and 9.
             m_channelData[m_currentBank][8] = m_channelData[m_currentBank][6];
             m_channelData[m_currentBank][9] = m_channelData[m_currentBank][7];
             m_channelData[m_currentBank][6] = m_channelData[m_currentBank ^ 1][6];
             m_channelData[m_currentBank][7] = m_channelData[m_currentBank ^ 1][7];
-            currentChannel += 2;
         }
 
         m_timeoutCounter = 0;
         m_currentBank ^= 1;
-        m_channelCount = currentChannel;
+        m_channelCount = m_currentChannel + 2;
         m_isReceiving = true;
         m_hasNewData = true;
+        static_cast<T*>(this)->OnFrameReceived();
     }
 
     static uint8_t GetSymbol(uint16_t width)

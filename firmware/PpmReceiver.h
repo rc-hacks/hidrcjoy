@@ -9,8 +9,8 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-template<class timer>
-class PpmReceiver : protected timer
+template<typename T, typename timer>
+class PpmReceiverT
 {
     static const uint8_t minChannelCount = 4;
     static const uint8_t maxChannelCount = 9;
@@ -78,17 +78,15 @@ public:
         return m_channelCount;
     }
 
+    uint16_t GetChannelTicks(uint8_t channel) const
+    {
+        atl::AutoLock lock;
+        return m_pulseWidth[m_currentBank ^ 1][channel];
+    }
+
     uint16_t GetChannelPulseWidth(uint8_t channel) const
     {
-        auto pulseWidth = &m_pulseWidth[m_currentBank ^ 1][channel];
-
-        uint16_t value;
-        {
-            atl::AutoLock lock;
-            value = *pulseWidth;
-        }
-
-        return channel < m_channelCount ? timer::TicksToUs(value) : 0;
+        return channel < m_channelCount ? timer::TicksToUs(GetChannelTicks(channel)) : 0;
     }
 
     void OnInputCapture(uint16_t time, bool risingEdge)
@@ -103,6 +101,19 @@ public:
     void OnOutputCompare()
     {
         ProcessSyncPause();
+    }
+
+protected:
+    void OnSyncDetected()
+    {
+    }
+
+    void OnFrameReceived()
+    {
+    }
+
+    void OnError()
+    {
     }
 
 private:
@@ -135,6 +146,7 @@ private:
         }
 
         m_state = State::SyncDetected;
+        static_cast<T*>(this)->OnSyncDetected();
     }
 
     void ProcessFrame()
@@ -147,6 +159,7 @@ private:
             m_channelCount = currentChannel;
             m_isReceiving = true;
             m_hasNewData = true;
+            static_cast<T*>(this)->OnFrameReceived();
         }
     }
 

@@ -9,8 +9,8 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-template<class timer, class usart>
-class SrxlReceiver : protected timer, protected usart
+template<typename T, typename timer, typename usart>
+class SrxlReceiverT
 {
     static const uint8_t maxChannelCount = 16;
     static const uint32_t baudrate = 115200;
@@ -110,6 +110,19 @@ public:
         ProcessSyncPause();
     }
 
+protected:
+    void OnSyncDetected()
+    {
+    }
+
+    void OnFrameReceived()
+    {
+    }
+
+    void OnError()
+    {
+    }
+
 private:
     void AddByteToFrame(uint8_t ch)
     {
@@ -128,42 +141,40 @@ private:
 
                 if (frame[0] == headerV1 && m_bytesReceived == 1 + 12 * 2 + 2)
                 {
-                    DecodeDataFrame(frame, 12);
+                    ProcessFrame(frame, 12);
                 }
                 else if (frame[0] == headerV2 && m_bytesReceived == 1 + 16 * 2 + 2)
                 {
-                    DecodeDataFrame(frame, 16);
+                    ProcessFrame(frame, 16);
                 }
             }
-        }
-    }
-
-    void DecodeDataFrame(const volatile uint8_t* frame, uint8_t channelCount)
-    {
-        uint16_t crc = GetUInt16(frame, m_bytesReceived - 2);
-        if (CalculateCrc16(frame, m_bytesReceived - 2) == crc)
-        {
-            ProcessFrame(channelCount);
-            m_state = State::SyncDetected;
-        }
-        else
-        {
-            m_state = State::WaitingForSync;
         }
     }
 
     void ProcessSyncPause()
     {
         m_state = State::SyncDetected;
+        static_cast<T*>(this)->OnSyncDetected();
     }
 
-    void ProcessFrame(uint8_t channelCount)
+    void ProcessFrame(const volatile uint8_t* frame, uint8_t channelCount)
     {
-        m_timeoutCounter = 0;
-        m_currentBank ^= 1;
-        m_channelCount = channelCount;
-        m_isReceiving = true;
-        m_hasNewData = true;
+        uint16_t crc = GetUInt16(frame, m_bytesReceived - 2);
+        if (CalculateCrc16(frame, m_bytesReceived - 2) == crc)
+        {
+            m_timeoutCounter = 0;
+            m_currentBank ^= 1;
+            m_channelCount = channelCount;
+            m_isReceiving = true;
+            m_hasNewData = true;
+            static_cast<T*>(this)->OnFrameReceived();
+            m_state = State::SyncDetected;
+        }
+        else
+        {
+            m_state = State::WaitingForSync;
+            static_cast<T*>(this)->OnError();
+        }
     }
 
     static uint16_t GetUInt16(const volatile uint8_t* data, uint8_t index)
