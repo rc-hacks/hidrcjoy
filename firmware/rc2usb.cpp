@@ -48,11 +48,14 @@ static DigitalOutputPin<11> g_pinDebug11;
 
 static BuiltinLed g_BuiltinLed;
 static DigitalInputPin<4> g_SignalCapturePin;
-static DigitalInputPin<14> g_SignalChangePin;
 static TaskTimer g_TaskTimer;
 static Configuration g_Configuration;
 static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
 static uint32_t g_updateRate;
+
+#if RC2USB_PCINT
+static DigitalInputPin<14> g_SignalChangePin;
+#endif
 
 #if RC2USB_PPM
 class PpmReceiver : public PpmReceiverT<PpmReceiver, PpmReceiverTimer1B>
