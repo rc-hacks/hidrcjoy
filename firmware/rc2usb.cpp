@@ -47,14 +47,14 @@ static DigitalOutputPin<11> g_pinDebug11;
 #endif
 
 static BuiltinLed g_builtinLed;
-static DigitalInputPin<4> g_SignalCapturePin;
+static DigitalInputPin<4> g_signalCapturePin;
 static TaskTimer g_taskTimer;
-static Configuration g_Configuration;
-static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
+static Configuration g_configuration;
+static Configuration g_eepromConfiguration __attribute__((section(".eeprom")));
 static uint32_t g_updateRate;
 
 #if RC2USB_PCINT
-static DigitalInputPin<14> g_SignalChangePin;
+static DigitalInputPin<14> g_signalChangePin;
 #endif
 
 #if RC2USB_PPM
@@ -143,24 +143,24 @@ public:
 
     void LoadDefaultConfiguration()
     {
-        g_Configuration.m_version = Configuration::version;
-        g_Configuration.m_flags = 0;
-        g_Configuration.m_minSyncPulseWidth = 3500;
-        g_Configuration.m_centerChannelPulseWidth = 1500;
-        g_Configuration.m_channelPulseWidthRange = 550;
-        g_Configuration.m_polarity = 0;
+        g_configuration.m_version = Configuration::version;
+        g_configuration.m_flags = 0;
+        g_configuration.m_minSyncPulseWidth = 3500;
+        g_configuration.m_centerChannelPulseWidth = 1500;
+        g_configuration.m_channelPulseWidthRange = 550;
+        g_configuration.m_polarity = 0;
 
-        for (uint8_t i = 0; i < COUNTOF(g_Configuration.m_mapping); i++)
+        for (uint8_t i = 0; i < COUNTOF(g_configuration.m_mapping); i++)
         {
-            g_Configuration.m_mapping[i] = i;
+            g_configuration.m_mapping[i] = i;
         }
     }
 
     void UpdateConfiguration()
     {
 #if RC2USB_PPM
-        auto minSyncPulseWidth = g_Configuration.m_minSyncPulseWidth;
-        auto invertedSignal = (g_Configuration.m_flags & Configuration::Flags::InvertedSignal) != 0;
+        auto minSyncPulseWidth = g_configuration.m_minSyncPulseWidth;
+        auto invertedSignal = (g_configuration.m_flags & Configuration::Flags::InvertedSignal) != 0;
         ATL_DEBUG_PRINT("Configuration: MinSyncPulseWidth: %u\n", minSyncPulseWidth);
         ATL_DEBUG_PRINT("Configuration: InvertedSignal: %d\n", invertedSignal);
         g_ppmReceiver.SetConfiguration(minSyncPulseWidth, invertedSignal);
@@ -169,24 +169,24 @@ public:
 
     bool IsValidConfiguration() const
     {
-        if (g_Configuration.m_version != Configuration::version)
+        if (g_configuration.m_version != Configuration::version)
             return false;
 
-        if (g_Configuration.m_minSyncPulseWidth < Configuration::minSyncWidth ||
-            g_Configuration.m_minSyncPulseWidth > Configuration::maxSyncWidth)
+        if (g_configuration.m_minSyncPulseWidth < Configuration::minSyncWidth ||
+            g_configuration.m_minSyncPulseWidth > Configuration::maxSyncWidth)
             return false;
 
-        if (g_Configuration.m_centerChannelPulseWidth < Configuration::minChannelPulseWidth ||
-            g_Configuration.m_centerChannelPulseWidth > Configuration::maxChannelPulseWidth)
+        if (g_configuration.m_centerChannelPulseWidth < Configuration::minChannelPulseWidth ||
+            g_configuration.m_centerChannelPulseWidth > Configuration::maxChannelPulseWidth)
             return false;
 
-        if (g_Configuration.m_channelPulseWidthRange < 10 ||
-            g_Configuration.m_channelPulseWidthRange > Configuration::maxChannelPulseWidth)
+        if (g_configuration.m_channelPulseWidthRange < 10 ||
+            g_configuration.m_channelPulseWidthRange > Configuration::maxChannelPulseWidth)
             return false;
 
-        for (uint8_t i = 0; i < COUNTOF(g_Configuration.m_mapping); i++)
+        for (uint8_t i = 0; i < COUNTOF(g_configuration.m_mapping); i++)
         {
-            if (g_Configuration.m_mapping[i] >= Configuration::maxInputChannels)
+            if (g_configuration.m_mapping[i] >= Configuration::maxInputChannels)
             {
                 return false;
             }
@@ -223,7 +223,7 @@ public:
 
     uint16_t GetChannelData(uint8_t channel) const
     {
-        uint8_t index = g_Configuration.m_mapping[channel];
+        uint8_t index = g_configuration.m_mapping[channel];
 
         switch (m_signalSource)
         {
@@ -246,7 +246,7 @@ public:
 
     uint8_t GetChannelValue(uint8_t channel) const
     {
-        uint8_t index = g_Configuration.m_mapping[channel];
+        uint8_t index = g_configuration.m_mapping[channel];
 
         switch (m_signalSource)
         {
@@ -328,9 +328,9 @@ private:
         if (value == 0)
             return 0x80;
 
-        int16_t center = g_Configuration.m_centerChannelPulseWidth;
-        int16_t range = g_Configuration.m_channelPulseWidthRange;
-        bool inverted = (g_Configuration.m_polarity & (1 << channel)) != 0;
+        int16_t center = g_configuration.m_centerChannelPulseWidth;
+        int16_t range = g_configuration.m_channelPulseWidthRange;
+        bool inverted = (g_configuration.m_polarity & (1 << channel)) != 0;
         return SaturateValue(ScaleValue(InvertValue(static_cast<int16_t>(value) - center, inverted), range));
     }
 
@@ -374,7 +374,7 @@ static void LoadConfigurationDefaults()
 
 static void ReadConfigurationFromEeprom()
 {
-    eeprom_read_block(&g_Configuration, &g_EepromConfiguration, sizeof(g_EepromConfiguration));
+    eeprom_read_block(&g_configuration, &g_eepromConfiguration, sizeof(g_eepromConfiguration));
 
     if (!g_receiver.IsValidConfiguration())
     {
@@ -386,7 +386,7 @@ static void ReadConfigurationFromEeprom()
 
 static void WriteConfigurationToEeprom()
 {
-    eeprom_write_block(&g_Configuration, &g_EepromConfiguration, sizeof(g_EepromConfiguration));
+    eeprom_write_block(&g_configuration, &g_eepromConfiguration, sizeof(g_eepromConfiguration));
 }
 
 //---------------------------------------------------------------------------
@@ -707,8 +707,8 @@ private:
             }
             case ConfigurationReportId:
             {
-                g_Configuration.m_reportId = ConfigurationReportId;
-                return WriteControlData(request.wLength, &g_Configuration, sizeof(g_Configuration), MemoryType::Ram);
+                g_configuration.m_reportId = ConfigurationReportId;
+                return WriteControlData(request.wLength, &g_configuration, sizeof(g_configuration), MemoryType::Ram);
             }
             default:
                 return RequestStatus::NotHandled;
@@ -721,7 +721,7 @@ private:
             {
             case ConfigurationReportId:
             {
-                auto status = ReadControlData(&g_Configuration, sizeof(g_Configuration));
+                auto status = ReadControlData(&g_configuration, sizeof(g_configuration));
                 g_receiver.UpdateConfiguration();
                 return status;
             }
@@ -797,7 +797,7 @@ ISR(TIMER1_CAPT_vect)
 ISR(PCINT0_vect)
 {
     uint16_t time = TaskTimer::TCNT();
-    bool risingEdge = g_SignalChangePin;
+    bool risingEdge = g_signalChangePin;
 
 #if RC2USB_DEBUG
     g_pinDebug10 = risingEdge;
@@ -868,11 +868,11 @@ int main(void)
     StdStreams::SetupStdout([](char ch) { g_usbDevice.WriteChar(ch); });
 #endif
 
-    g_SignalCapturePin.Configure(PinMode::InputPullup);
+    g_signalCapturePin.Configure(PinMode::InputPullup);
 
 #if RC2USB_PCINT
     // Configure D14 (PB3/MISO) as PCINT3
-    g_SignalChangePin.Configure(PinMode::InputPullup);
+    g_signalChangePin.Configure(PinMode::InputPullup);
     PCMSK0 = _BV(PCINT3);
     PCIFR = _BV(PCIF0);
     PCICR = _BV(PCIE0);
