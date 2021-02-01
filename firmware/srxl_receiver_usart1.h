@@ -26,7 +26,7 @@ public:
         UCSR1C = _BV(UCSZ11) | _BV(UCSZ10);
     }
 
-    static void Terminate(void)
+    static void Terminate()
     {
         UCSR1B = 0;
         UCSR1C = 0;

@@ -1,5 +1,5 @@
 //
-// TaskTimer.h
+// task_timer.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -30,7 +30,7 @@ public:
         TIMSK1 |= _BV(OCIE1A);
     }
 
-    void Terminate(void)
+    void Terminate()
     {
         TIMSK1 &= ~_BV(OCIE1A);
     }
@@ -62,7 +62,7 @@ public:
         return ICR1;
     }
 
-    void OnOutputCompare(void)
+    void OnOutputCompare()
     {
         OCR1A += UsToTicks(TaskTickUs);
         m_milliseconds++;

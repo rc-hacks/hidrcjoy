@@ -1,5 +1,5 @@
 //
-// PpmReceiverTimer1B.h
+// pcm_receiver_timer1.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -9,7 +9,7 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-class PpmReceiverTimer1B
+class PcmReceiverTimer1
 {
 public:
     static void Initialize()
@@ -18,29 +18,16 @@ public:
         TCCR1A = 0;
         TCCR1B = _BV(CS11) | _BV(ICNC1);
 
-        // Set long timeout
-        OCR1B = TCNT1 - 1;
-
         // Clear pending IRQs
-        TIFR1 |= _BV(ICF1) | _BV(OCF1B);
+        TIFR1 |= _BV(ICF1);
 
-        // Enable IRQs: Input Capture, Output Compare B
-        TIMSK1 |= _BV(ICIE1) | _BV(OCIE1B);
+        // Enable IRQs: Input Capture
+        TIMSK1 |= _BV(ICIE1);
     }
 
-    static void Terminate(void)
+    static void Terminate()
     {
-        TIMSK1 &= ~(_BV(ICIE1) | _BV(OCIE1B));
-    }
-
-    static volatile uint16_t& TCNT()
-    {
-        return TCNT1;
-    }
-
-    static volatile uint16_t& OCR()
-    {
-        return OCR1B;
+        TIMSK1 &= ~_BV(ICIE1);
     }
 
     static constexpr uint16_t TicksToUs(uint16_t value)

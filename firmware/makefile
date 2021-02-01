@@ -3,7 +3,7 @@
 # Copyright (C) 2018 Marius Greuel. All rights reserved.
 #
 
-BOARD ?= BOARD_ARDUINO_MICRO
+BOARD ?= BOARD_ARDUINO_LEONARDO
 
 ATL_PATH = atl
 TARGET = rc2usb

@@ -1,5 +1,5 @@
 //
-// PcmReceiver.h
+// pcm_receiver.h
 // Copyright (C) 2018 Marius Greuel. All rights reserved.
 //
 
@@ -17,13 +17,13 @@ class PcmReceiverT
     static const uint8_t timeoutMs = 100;
 
 public:
-    void Initialize(void)
+    void Initialize()
     {
         timer::Initialize();
         Reset();
     }
 
-    void Terminate(void)
+    void Terminate()
     {
         timer::Terminate();
     }

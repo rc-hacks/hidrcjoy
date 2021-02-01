@@ -26,15 +26,15 @@
 
 using namespace atl;
 
-#include "TaskTimer.h"
-#include "PpmReceiver.h"
-#include "PpmReceiverTimer1B.h"
-#include "PcmReceiver.h"
-#include "PcmReceiverTimer1.h"
-#include "SrxlReceiver.h"
-#include "SrxlReceiverTimer1C.h"
-#include "SrxlReceiverUsart1.h"
-#include "UsbReports.h"
+#include "task_timer.h"
+#include "ppm_receiver.h"
+#include "ppm_receiver_timer1b.h"
+#include "pcm_receiver.h"
+#include "pcm_receiver_timer1.h"
+#include "srxl_receiver.h"
+#include "srxl_receiver_timer1c.h"
+#include "srxl_receiver_usart1.h"
+#include "usb_reports.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -46,9 +46,9 @@ static DigitalOutputPin<10> g_pinDebug10;
 static DigitalOutputPin<11> g_pinDebug11;
 #endif
 
-static BuiltinLed g_BuiltinLed;
+static BuiltinLed g_builtinLed;
 static DigitalInputPin<4> g_SignalCapturePin;
-static TaskTimer g_TaskTimer;
+static TaskTimer g_taskTimer;
 static Configuration g_Configuration;
 static Configuration g_EepromConfiguration __attribute__((section(".eeprom")));
 static uint32_t g_updateRate;
@@ -62,7 +62,7 @@ class PpmReceiver : public PpmReceiverT<PpmReceiver, PpmReceiverTimer1B>
 {
 };
 
-static PpmReceiver g_PpmReceiver;
+static PpmReceiver g_ppmReceiver;
 #endif
 
 #if RC2USB_PCM
@@ -70,7 +70,7 @@ class PcmReceiver : public PcmReceiverT<PcmReceiver, PcmReceiverTimer1>
 {
 };
 
-static PcmReceiver g_PcmReceiver;
+static PcmReceiver g_pcmReceiver;
 #endif
 
 #if RC2USB_SRXL
@@ -78,7 +78,7 @@ class SrxlReceiver : public SrxlReceiverT<SrxlReceiver, SrxlReceiverTimer1C, Srx
 {
 };
 
-static SrxlReceiver g_SrxlReceiver;
+static SrxlReceiver g_srxlReceiver;
 #endif
 
 //---------------------------------------------------------------------------
@@ -89,26 +89,26 @@ public:
     void Initialize()
     {
 #if RC2USB_PPM
-        g_PpmReceiver.Initialize();
+        g_ppmReceiver.Initialize();
 #endif
 #if RC2USB_PCM
-        g_PcmReceiver.Initialize();
+        g_pcmReceiver.Initialize();
 #endif
 #if RC2USB_SRXL
-        g_SrxlReceiver.Initialize();
+        g_srxlReceiver.Initialize();
 #endif
     }
 
     void Terminate()
     {
 #if RC2USB_PPM
-        g_PpmReceiver.Terminate();
+        g_ppmReceiver.Terminate();
 #endif
 #if RC2USB_PCM
-        g_PcmReceiver.Terminate();
+        g_pcmReceiver.Terminate();
 #endif
 #if RC2USB_SRXL
-        g_SrxlReceiver.Terminate();
+        g_srxlReceiver.Terminate();
 #endif
     }
 
@@ -118,19 +118,19 @@ public:
         {
         }
 #if RC2USB_PPM
-        else if (g_PpmReceiver.IsReceiving())
+        else if (g_ppmReceiver.IsReceiving())
         {
             m_signalSource = SignalSource::PPM;
         }
 #endif
 #if RC2USB_PCM
-        else if (g_PcmReceiver.IsReceiving())
+        else if (g_pcmReceiver.IsReceiving())
         {
             m_signalSource = SignalSource::PCM;
         }
 #endif
 #if RC2USB_SRXL
-        else if (g_SrxlReceiver.IsReceiving())
+        else if (g_srxlReceiver.IsReceiving())
         {
             m_signalSource = SignalSource::SRXL;
         }
@@ -163,7 +163,7 @@ public:
         auto invertedSignal = (g_Configuration.m_flags & Configuration::Flags::InvertedSignal) != 0;
         ATL_DEBUG_PRINT("Configuration: MinSyncPulseWidth: %u\n", minSyncPulseWidth);
         ATL_DEBUG_PRINT("Configuration: InvertedSignal: %d\n", invertedSignal);
-        g_PpmReceiver.SetConfiguration(minSyncPulseWidth, invertedSignal);
+        g_ppmReceiver.SetConfiguration(minSyncPulseWidth, invertedSignal);
 #endif
     }
 
@@ -206,15 +206,15 @@ public:
         {
 #if RC2USB_PPM
         case SignalSource::PPM:
-            return g_PpmReceiver.GetChannelCount();
+            return g_ppmReceiver.GetChannelCount();
 #endif
 #if RC2USB_PCM
         case SignalSource::PCM:
-            return g_PcmReceiver.GetChannelCount();
+            return g_pcmReceiver.GetChannelCount();
 #endif
 #if RC2USB_SRXL
         case SignalSource::SRXL:
-            return g_SrxlReceiver.GetChannelCount();
+            return g_srxlReceiver.GetChannelCount();
 #endif
         default:
             return 0;
@@ -229,15 +229,15 @@ public:
         {
 #if RC2USB_PPM
         case SignalSource::PPM:
-            return g_PpmReceiver.GetChannelPulseWidth(index);
+            return g_ppmReceiver.GetChannelPulseWidth(index);
 #endif
 #if RC2USB_PCM
         case SignalSource::PCM:
-            return g_PcmReceiver.GetChannelPulseWidth(index);
+            return g_pcmReceiver.GetChannelPulseWidth(index);
 #endif
 #if RC2USB_SRXL
         case SignalSource::SRXL:
-            return g_SrxlReceiver.GetChannelPulseWidth(index);
+            return g_srxlReceiver.GetChannelPulseWidth(index);
 #endif
         default:
             return 0;
@@ -252,15 +252,15 @@ public:
         {
 #if RC2USB_PPM
         case SignalSource::PPM:
-            return PulseWidthToValue(channel, g_PpmReceiver.GetChannelPulseWidth(index));
+            return PulseWidthToValue(channel, g_ppmReceiver.GetChannelPulseWidth(index));
 #endif
 #if RC2USB_PCM
         case SignalSource::PCM:
-            return PulseWidthToValue(channel, g_PcmReceiver.GetChannelPulseWidth(index));
+            return PulseWidthToValue(channel, g_pcmReceiver.GetChannelPulseWidth(index));
 #endif
 #if RC2USB_SRXL
         case SignalSource::SRXL:
-            return PulseWidthToValue(channel, g_SrxlReceiver.GetChannelPulseWidth(index));
+            return PulseWidthToValue(channel, g_srxlReceiver.GetChannelPulseWidth(index));
 #endif
         default:
             return 0x80;
@@ -273,15 +273,15 @@ public:
         {
 #if RC2USB_PPM
         case SignalSource::PPM:
-            return g_PpmReceiver.IsReceiving();
+            return g_ppmReceiver.IsReceiving();
 #endif
 #if RC2USB_PCM
         case SignalSource::PCM:
-            return g_PcmReceiver.IsReceiving();
+            return g_pcmReceiver.IsReceiving();
 #endif
 #if RC2USB_SRXL
         case SignalSource::SRXL:
-            return g_SrxlReceiver.IsReceiving();
+            return g_srxlReceiver.IsReceiving();
 #endif
         default:
             return false;
@@ -294,15 +294,15 @@ public:
         {
 #if RC2USB_PPM
         case SignalSource::PPM:
-            return g_PpmReceiver.HasNewData();
+            return g_ppmReceiver.HasNewData();
 #endif
 #if RC2USB_PCM
         case SignalSource::PCM:
-            return g_PcmReceiver.HasNewData();
+            return g_pcmReceiver.HasNewData();
 #endif
 #if RC2USB_SRXL
         case SignalSource::SRXL:
-            return g_SrxlReceiver.HasNewData();
+            return g_srxlReceiver.HasNewData();
 #endif
         default:
             return false;
@@ -312,13 +312,13 @@ public:
     void ClearNewData()
     {
 #if RC2USB_PPM
-        g_PpmReceiver.ClearNewData();
+        g_ppmReceiver.ClearNewData();
 #endif
 #if RC2USB_PCM
-        g_PcmReceiver.ClearNewData();
+        g_pcmReceiver.ClearNewData();
 #endif
 #if RC2USB_SRXL
-        g_SrxlReceiver.ClearNewData();
+        g_srxlReceiver.ClearNewData();
 #endif
     }
 
@@ -362,26 +362,26 @@ private:
 
 private:
     SignalSource m_signalSource = SignalSource::None;
-} g_Receiver;
+} g_receiver;
 
 //---------------------------------------------------------------------------
 
 static void LoadConfigurationDefaults()
 {
-    g_Receiver.LoadDefaultConfiguration();
-    g_Receiver.UpdateConfiguration();
+    g_receiver.LoadDefaultConfiguration();
+    g_receiver.UpdateConfiguration();
 }
 
 static void ReadConfigurationFromEeprom()
 {
     eeprom_read_block(&g_Configuration, &g_EepromConfiguration, sizeof(g_EepromConfiguration));
 
-    if (!g_Receiver.IsValidConfiguration())
+    if (!g_receiver.IsValidConfiguration())
     {
-        g_Receiver.LoadDefaultConfiguration();
+        g_receiver.LoadDefaultConfiguration();
     }
 
-    g_Receiver.UpdateConfiguration();
+    g_receiver.UpdateConfiguration();
 }
 
 static void WriteConfigurationToEeprom()
@@ -444,14 +444,14 @@ public:
 
         for (uint8_t i = 0; i < COUNTOF(report.m_value); i++)
         {
-            report.m_value[i] = g_Receiver.GetChannelValue(i);
+            report.m_value[i] = g_receiver.GetChannelValue(i);
         }
     }
 
     void CreateEnhancedReport(UsbEnhancedReport& report)
     {
-        auto signalSource = g_Receiver.GetSignalSource();
-        auto channelCount = g_Receiver.GetChannelCount();
+        auto signalSource = g_receiver.GetSignalSource();
+        auto channelCount = g_receiver.GetChannelCount();
 
         report.m_reportId = UsbEnhancedReportId;
         report.m_signalSource = signalSource;
@@ -460,7 +460,7 @@ public:
 
         for (uint8_t i = 0; i < COUNTOF(report.m_channelPulseWidth); i++)
         {
-            report.m_channelPulseWidth[i] = g_Receiver.GetChannelData(i);
+            report.m_channelPulseWidth[i] = g_receiver.GetChannelData(i);
         }
     }
 
@@ -722,7 +722,7 @@ private:
             case ConfigurationReportId:
             {
                 auto status = ReadControlData(&g_Configuration, sizeof(g_Configuration));
-                g_Receiver.UpdateConfiguration();
+                g_receiver.UpdateConfiguration();
                 return status;
             }
             case LoadConfigurationDefaultsId:
@@ -761,7 +761,7 @@ private:
         Detach();
         Bootloader::ResetToBootloader();
     }
-} g_UsbDevice;
+} g_usbDevice;
 
 //---------------------------------------------------------------------------
 
@@ -783,10 +783,10 @@ ISR(TIMER1_CAPT_vect)
 #endif
 
 #if RC2USB_PPM
-    g_PpmReceiver.OnInputCapture(time, capturedEdge);
+    g_ppmReceiver.OnInputCapture(time, capturedEdge);
 #endif
 #if RC2USB_PCM
-    g_PcmReceiver.OnInputCapture(time, capturedEdge);
+    g_pcmReceiver.OnInputCapture(time, capturedEdge);
 #endif
 
     risingEdge = !risingEdge;
@@ -804,58 +804,58 @@ ISR(PCINT0_vect)
 #endif
 
 #if RC2USB_PPM
-    g_PpmReceiver.OnInputCapture(time, risingEdge);
+    g_ppmReceiver.OnInputCapture(time, risingEdge);
 #endif
 #if RC2USB_PCM
-    g_PcmReceiver.OnInputCapture(time, risingEdge);
+    g_pcmReceiver.OnInputCapture(time, risingEdge);
 #endif
 }
 #endif
 
 ISR(TIMER1_COMPA_vect)
 {
-    g_TaskTimer.OnOutputCompare();
+    g_taskTimer.OnOutputCompare();
 
 #if RC2USB_PPM
-    g_PpmReceiver.RunTask();
+    g_ppmReceiver.RunTask();
 #endif
 #if RC2USB_PCM
-    g_PcmReceiver.RunTask();
+    g_pcmReceiver.RunTask();
 #endif
 #if RC2USB_SRXL
-    g_SrxlReceiver.RunTask();
+    g_srxlReceiver.RunTask();
 #endif
 }
 
 #if RC2USB_PPM
 ISR(TIMER1_COMPB_vect)
 {
-    g_PpmReceiver.OnOutputCompare();
+    g_ppmReceiver.OnOutputCompare();
 }
 #endif
 
 #if RC2USB_SRXL
 ISR(TIMER1_COMPC_vect)
 {
-    g_SrxlReceiver.OnOutputCompare();
+    g_srxlReceiver.OnOutputCompare();
 }
 #endif
 
 #if RC2USB_SRXL
 ISR(USART1_RX_vect)
 {
-    g_SrxlReceiver.OnDataReceived(UDR1);
+    g_srxlReceiver.OnDataReceived(UDR1);
 }
 #endif
 
 ISR(USB_GEN_vect)
 {
-    g_UsbDevice.OnGeneralInterrupt();
+    g_usbDevice.OnGeneralInterrupt();
 }
 
 ISR(USB_COM_vect)
 {
-    g_UsbDevice.OnEndpointInterrupt();
+    g_usbDevice.OnEndpointInterrupt();
 }
 
 //---------------------------------------------------------------------------
@@ -865,7 +865,7 @@ int main(void)
     Watchdog::Enable(Watchdog::Timeout::Time250ms);
 
 #if RC2USB_DEBUG
-    StdStreams::SetupStdout([](char ch) { g_UsbDevice.WriteChar(ch); });
+    StdStreams::SetupStdout([](char ch) { g_usbDevice.WriteChar(ch); });
 #endif
 
     g_SignalCapturePin.Configure(PinMode::InputPullup);
@@ -879,7 +879,7 @@ int main(void)
 #endif
 
 #if RC2USB_ACIC_A0
-    // Enable Analog Comparator Input Capture for A0/ADC7 (instead of ICP1)
+    // Enable Analog Comparator Input Capture for PF7/A0/ADC7 (instead of ICP1)
     ACSR = _BV(ACBG) | _BV(ACIC);
     ADCSRA = 0;
     ADCSRB = _BV(ACME);
@@ -892,11 +892,11 @@ int main(void)
     g_pinDebug11.Configure();
 #endif
 
-    g_BuiltinLed.Configure();
+    g_builtinLed.Configure();
 
-    g_TaskTimer.Initialize();
-    g_Receiver.Initialize();
-    g_UsbDevice.Attach();
+    g_taskTimer.Initialize();
+    g_receiver.Initialize();
+    g_usbDevice.Attach();
 
     ReadConfigurationFromEeprom();
     
@@ -912,21 +912,21 @@ int main(void)
     {
         Watchdog::Reset();
 
-        uint32_t time = g_TaskTimer.GetMilliseconds();
+        uint32_t time = g_taskTimer.GetMilliseconds();
 
-        g_Receiver.Update();
-        if (g_Receiver.IsReceiving())
+        g_receiver.Update();
+        if (g_receiver.IsReceiving())
         {
-            if (g_Receiver.HasNewData())
+            if (g_receiver.HasNewData())
             {
-                if (g_UsbDevice.WriteReport())
+                if (g_usbDevice.WriteReport())
                 {
                     g_updateRate = time - lastUsbUpdate;
                     lastLedUpdate = time;
                     lastUsbUpdate = time;
 
-                    g_BuiltinLed = true;
-                    g_Receiver.ClearNewData();
+                    g_builtinLed = true;
+                    g_receiver.ClearNewData();
                 }
             }
         }
@@ -935,10 +935,10 @@ int main(void)
             if (time - lastLedUpdate >= 1000)
             {
                 lastLedUpdate = time;
-                g_BuiltinLed.Toggle();
+                g_builtinLed.Toggle();
             }
 
-            g_UsbDevice.WriteReport();
+            g_usbDevice.WriteReport();
         }
 
 #if RC2USB_DEBUG
