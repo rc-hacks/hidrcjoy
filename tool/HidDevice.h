@@ -5,8 +5,8 @@
 
 #pragma once
 #include "Buffer.h"
-#include "../firmware/Configuration.h"
-#include "../firmware/UsbReports.h"
+#include "../firmware/configuration.h"
+#include "../firmware/usb_reports.h"
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -68,19 +68,19 @@ public:
     void ReadReport(UsbReport& report)
     {
         auto buffer = Read();
-        std::memcpy(&report, buffer.data(), sizeof(report));
+        std::memcpy(&report, buffer.GetData(), sizeof(report));
     }
 
     void ReadEnhancedReport(UsbEnhancedReport& report)
     {
         auto buffer = GetFeatureReport(UsbEnhancedReportId);
-        std::memcpy(&report, buffer.data(), sizeof(report));
+        std::memcpy(&report, buffer.GetData(), sizeof(report));
     }
 
     void ReadConfiguration()
     {
         auto buffer = GetFeatureReport(ConfigurationReportId);
-        std::memcpy(&m_configuration, buffer.data(), sizeof(m_configuration));
+        std::memcpy(&m_configuration, buffer.GetData(), sizeof(m_configuration));
     }
 
     void WriteConfiguration()
@@ -114,7 +114,7 @@ public:
         Buffer<uint8_t> buffer(m_caps.InputReportByteLength);
 
         DWORD dwBytesRead = 0;
-        if (!ReadFile(m_hDevice, buffer.data(), static_cast<DWORD>(buffer.size()), &dwBytesRead, nullptr))
+        if (!ReadFile(m_hDevice, buffer.GetData(), static_cast<DWORD>(buffer.GetSize()), &dwBytesRead, nullptr))
             throw std::runtime_error("ReadFile failed");
 
         return buffer;
@@ -125,7 +125,7 @@ public:
         Buffer<uint8_t> buffer(m_caps.FeatureReportByteLength);
 
         buffer[0] = index;
-        if (!HidD_GetFeature(m_hDevice, buffer.data(), m_caps.FeatureReportByteLength))
+        if (!HidD_GetFeature(m_hDevice, buffer.GetData(), m_caps.FeatureReportByteLength))
             throw std::runtime_error("HidD_GetFeature failed");
 
         return buffer;
@@ -133,16 +133,16 @@ public:
 
     void SetFeatureReport(uint8_t index, const Buffer<uint8_t>& buffer)
     {
-        if (buffer.size() > m_caps.FeatureReportByteLength)
+        if (buffer.GetSize() > m_caps.FeatureReportByteLength)
             throw std::runtime_error("Buffer too big");
 
         Buffer<uint8_t> report(m_caps.FeatureReportByteLength);
 
-        std::memcpy(report.data(), buffer.data(), buffer.size());
-        std::memset(report.data() + buffer.size(), 0, m_caps.FeatureReportByteLength - buffer.size());
+        std::memcpy(report.GetData(), buffer.GetData(), buffer.GetSize());
+        std::memset(report.GetData() + buffer.GetSize(), 0, m_caps.FeatureReportByteLength - buffer.GetSize());
         report[0] = index;
 
-        if (!HidD_SetFeature(m_hDevice, report.data(), m_caps.FeatureReportByteLength))
+        if (!HidD_SetFeature(m_hDevice, report.GetData(), m_caps.FeatureReportByteLength))
             throw std::runtime_error("HidD_SetFeature failed");
     }
 
@@ -201,7 +201,7 @@ private:
 
     Configuration m_configuration{};
 };
-
+    
 //---------------------------------------------------------------------------
 
 class HidDeviceCollection
@@ -254,11 +254,11 @@ public:
 
             if (SetupDiGetDeviceInterfaceDetail(hDeviceInfoSet, &deviceInterfaceData, pDeviceInterfaceDetailData, dwRequiredSize, &dwRequiredSize, nullptr))
             {
-                std::unique_ptr<HidDevice> device = std::make_unique<HidDevice>();
+                auto device = std::make_shared<HidDevice>();
                 hr = device->Open(pDeviceInterfaceDetailData->DevicePath);
                 if (SUCCEEDED(hr))
                 {
-                    m_devices.push_back(std::move(device));
+                    m_devices.push_back(device);
                 }
             }
 
@@ -270,8 +270,9 @@ public:
         return S_OK;
     }
 
-    const std::vector<std::unique_ptr<HidDevice>>& GetDevices() const { return m_devices; }
+    size_t GetDeviceCount() const { return m_devices.size(); }
+    std::shared_ptr<HidDevice> GetDevice(size_t item) const { return m_devices[item]; }
 
 private:
-    std::vector<std::unique_ptr<HidDevice>> m_devices;
+    std::vector<std::shared_ptr<HidDevice>> m_devices;
 };

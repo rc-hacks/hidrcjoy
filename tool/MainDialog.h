@@ -128,8 +128,10 @@ public:
 public:
     BEGIN_MSG_MAP(CMainDialog)
         MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialog)
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
         MESSAGE_HANDLER(WM_DEVICECHANGE, OnDeviceChange)
-        MESSAGE_HANDLER(WM_TIMER, OnTimer)
+        MESSAGE_HANDLER(WM_RECEIVED_REPORT, OnReceivedReport)
+        MESSAGE_HANDLER(WM_RECEIVED_ENHANCED_REPORT, OnReceivedEnhancedReport)
         COMMAND_HANDLER(IDC_DEVICES, CBN_SELCHANGE, OnDevicesSelChange)
         COMMAND_HANDLER(IDC_MIN_SYNC_PULSE_WIDTH, EN_CHANGE, OnTimingChange)
         COMMAND_HANDLER(IDC_CENTER_CHANNEL_PULSE_WIDTH, EN_CHANGE, OnTimingChange)
@@ -169,11 +171,27 @@ public:
 
         PopulateDeviceList();
 
-        SetTimer(0, 10, nullptr);
+        DWORD dwThreadID = 0;
+        m_hThread = ::CreateThread(nullptr, 0, ThreadProc, this, 0, &dwThreadID);
+        m_hTerminate = ::CreateEvent(nullptr, TRUE, FALSE, nullptr);
 
         CenterWindow();
 
         return TRUE;
+    }
+
+    LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        SetEvent(m_hTerminate);
+        if (WaitForSingleObject(m_hThread, 5000) == WAIT_TIMEOUT)
+        {
+            TerminateThread(m_hThread, 0);
+        }
+
+        CloseHandle(m_hTerminate);
+        CloseHandle(m_hThread);
+
+        return 0;
     }
 
     LRESULT OnDeviceChange(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -189,38 +207,25 @@ public:
         return TRUE;
     }
 
-    LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    LRESULT OnReceivedReport(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr)
-        {
-            try
-            {
-                UsbReport report = {};
-                m_pDevice->ReadReport(report);
-                UpdateReportControls(report);
+        UpdateReportControls(m_report);
+        return FALSE;
+    }
 
-                static int count;
-                if (++count % 10 == 0)
-                {
-                    UsbEnhancedReport enhancedReport = {};
-                    m_pDevice->ReadEnhancedReport(enhancedReport);
-                    UpdateEnhancedReportControls(enhancedReport);
-                }
-            }
-            catch (std::exception&)
-            {
-            }
-        }
-
-        return 0;
+    LRESULT OnReceivedEnhancedReport(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        UpdateEnhancedReportControls(m_enhancedReport);
+        return FALSE;
     }
 
     LRESULT OnDevicesSelChange(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        const auto& devices = m_collection.GetDevices();
-        if (devices.size() > 0)
+        int selection = m_cbDevices.GetCurSel();
+        auto count = m_collection.GetDeviceCount();
+        if (selection >= 0 && selection < count)
         {
-            m_pDevice = devices[m_cbDevices.GetCurSel()].get();
+            m_pDevice = m_collection.GetDevice(selection);
             UpdateControls();
         }
 
@@ -229,7 +234,7 @@ public:
 
     LRESULT OnTimingChange(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr && !m_lockControlUpdate)
+        if (m_pDevice && !m_lockControlUpdate)
         {
             auto pConfiguration = m_pDevice->GetConfiguration();
             pConfiguration->m_minSyncPulseWidth = static_cast<uint16_t>(GetIntegerValue(m_ecMinSyncPulseWidth));
@@ -245,7 +250,7 @@ public:
 
     LRESULT OnChannelPolarity(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr && !m_lockControlUpdate)
+        if (m_pDevice && !m_lockControlUpdate)
         {
             int channel = wID - IDC_CHANNEL1_POLARITY;
 
@@ -261,7 +266,7 @@ public:
 
     LRESULT OnChannelSource(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr && !m_lockControlUpdate)
+        if (m_pDevice && !m_lockControlUpdate)
         {
             int channel = (wID - IDC_CHANNEL1_SOURCE1) / 10;
             int source = (wID - IDC_CHANNEL1_SOURCE1) % 10;
@@ -278,7 +283,7 @@ public:
 
     LRESULT OnLoadDefaultValues(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr)
+        if (m_pDevice)
         {
             try
             {
@@ -295,7 +300,7 @@ public:
 
     LRESULT OnReadFromEeprom(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr)
+        if (m_pDevice)
         {
             try
             {
@@ -312,7 +317,7 @@ public:
 
     LRESULT OnWriteToEeprom(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
     {
-        if (m_pDevice != nullptr)
+        if (m_pDevice)
         {
             try
             {
@@ -341,6 +346,39 @@ public:
     }
 
 private:
+    static DWORD WINAPI ThreadProc(LPVOID lpParameter)
+    {
+        return static_cast<CMainDialog*>(lpParameter)->ThreadProc();
+    }
+
+    DWORD ThreadProc()
+    {
+        while (WaitForSingleObject(m_hTerminate, 10) == WAIT_TIMEOUT)
+        {
+            std::shared_ptr<HidDevice> pDevice = m_pDevice;
+            if (pDevice)
+            {
+                try
+                {
+                    m_pDevice->ReadReport(m_report);
+                    PostMessage(WM_RECEIVED_REPORT);
+
+                    static int count = 0;
+                    if (++count % 10 == 0)
+                    {
+                        m_pDevice->ReadEnhancedReport(m_enhancedReport);
+                        PostMessage(WM_RECEIVED_ENHANCED_REPORT);
+                    }
+                }
+                catch (std::exception&)
+                {
+                }
+            }
+        }
+
+        return 0;
+    }
+
     HRESULT PopulateDeviceList()
     {
         m_cbDevices.ResetContent();
@@ -353,9 +391,7 @@ private:
             return hr;
         }
 
-        const auto& devices = m_collection.GetDevices();
-
-        size_t count = devices.size();
+        size_t count = m_collection.GetDeviceCount();
         if (count == 0)
         {
             m_stDeviceStatus.SetWindowText(_T("No devices found"));
@@ -364,25 +400,28 @@ private:
             ClearControls();
             return S_FALSE;
         }
-
-        m_stDeviceStatus.SetWindowText(FormatString(_T("Found %zu device(s)"), count));
-
-        for (const auto& device : devices)
+        else
         {
-            m_cbDevices.AddString(GetFriendlyDeviceName(device.get()));
+            m_stDeviceStatus.SetWindowText(FormatString(_T("Found %zu device(s)"), count));
+
+            for (size_t i = 0; i < count; i++)
+            {
+                auto device = m_collection.GetDevice(i);
+                m_cbDevices.AddString(GetFriendlyDeviceName(device.get()));
+            }
+
+            m_cbDevices.SetCurSel(0);
+            m_pDevice = m_collection.GetDevice(0);
+
+            UpdateControls();
+
+            return S_OK;
         }
-
-        m_cbDevices.SetCurSel(0);
-        m_pDevice = devices[0].get();
-
-        UpdateControls();
-
-        return S_OK;
     }
 
     void UpdateDeviceConfiguration()
     {
-        if (m_pDevice != nullptr)
+        if (m_pDevice)
         {
             try
             {
@@ -429,7 +468,7 @@ private:
 
     void UpdateControls()
     {
-        if (m_pDevice != nullptr)
+        if (m_pDevice)
         {
             try
             {
@@ -568,7 +607,13 @@ private:
     }
 
 private:
+    static const int WM_RECEIVED_REPORT = WM_USER + 1;
+    static const int WM_RECEIVED_ENHANCED_REPORT = WM_USER + 2;
     HidDeviceCollection m_collection;
-    HidDevice* m_pDevice = nullptr;
+    std::shared_ptr<HidDevice> m_pDevice;
+    UsbReport m_report = {};
+    UsbEnhancedReport m_enhancedReport = {};
+    HANDLE m_hThread = nullptr;
+    HANDLE m_hTerminate = nullptr;
     bool m_lockControlUpdate = false;
 };

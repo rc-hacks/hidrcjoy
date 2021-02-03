@@ -14,18 +14,16 @@ template <typename T = uint8_t>
 class Buffer
 {
 public:
-    Buffer()
-    {
-    }
+    Buffer() = default;
 
     Buffer(size_t size, bool initialize = true)
     {
-        allocate(size, initialize);
+        Allocate(size, initialize);
     }
 
     Buffer(const T* data, size_t size)
     {
-        allocate(size, false);
+        Allocate(size, false);
         std::memcpy(m_data, data, size);
     }
 
@@ -40,7 +38,7 @@ public:
 
     Buffer& operator=(Buffer&& buffer)
     {
-        free();
+        Free();
         std::swap(m_size, buffer.m_size);
         std::swap(m_data, buffer.m_data);
         return *this;
@@ -48,11 +46,11 @@ public:
 
     ~Buffer()
     {
-        free();
+        Free();
     }
 
-    T* data() const { return m_data; }
-    size_t size() const { return m_size; }
+    T* GetData() const { return m_data; }
+    size_t GetSize() const { return m_size; }
 
     T& operator[](size_t index)
     {
@@ -70,9 +68,9 @@ public:
         return m_data[index];
     }
 
-    void allocate(size_t size, bool initialize = true)
+    void Allocate(size_t size, bool initialize = true)
     {
-        free();
+        Free();
         m_size = size;
         m_data = new T[m_size];
 
@@ -82,7 +80,7 @@ public:
         }
     }
 
-    void free()
+    void Free()
     {
         if (m_data != nullptr)
         {
