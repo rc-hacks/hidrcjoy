@@ -25,6 +25,7 @@ public:
         TCCR1B = 0;
 
         m_led.Initialize();
+        m_debug.Initialize();
     }
 
     void RunTask(uint16_t time)
@@ -89,6 +90,67 @@ private:
         bool m_on = false;
     };
 
+    class Debug
+    {
+    public:
+        void Initialize()
+        {
+            DEBUG_DDR |= _BV(DEBUG_D9) | _BV(DEBUG_D10) | _BV(DEBUG_D11);
+        }
+
+        void SetD9(bool value)
+        {
+            if (value)
+            {
+                DEBUG_PORT |= _BV(DEBUG_D9);
+            }
+            else
+            {
+                DEBUG_PORT &= ~_BV(DEBUG_D9);
+            }
+        }
+
+        void SetD10(bool value)
+        {
+            if (value)
+            {
+                DEBUG_PORT |= _BV(DEBUG_D10);
+            }
+            else
+            {
+                DEBUG_PORT &= ~_BV(DEBUG_D10);
+            }
+        }
+
+        void SetD11(bool value)
+        {
+            if (value)
+            {
+                DEBUG_PORT |= _BV(DEBUG_D11);
+            }
+            else
+            {
+                DEBUG_PORT &= ~_BV(DEBUG_D11);
+            }
+        }
+
+        void ToggleD9()
+        {
+            DEBUG_PIN |= _BV(DEBUG_D9);
+        }
+
+        void ToggleD10()
+        {
+            DEBUG_PIN |= _BV(DEBUG_D10);
+        }
+
+        void ToggleD11()
+        {
+            DEBUG_PIN |= _BV(DEBUG_D11);
+        }
+    };
+
 public:
     Led m_led;
+    Debug m_debug;
 };

@@ -8,10 +8,10 @@
 #define HIDRCJOY_PPM 1
 #define HIDRCJOY_PCM 1
 #define HIDRCJOY_SRXL 1
-#define HIDRCJOY_PCINT 1
-#define HIDRCJOY_ICP 0
+#define HIDRCJOY_ICP 1
+#define HIDRCJOY_PCINT 0
 #define HIDRCJOY_ICP_ACIC_A0 1
-#define HIDRCJOY_DEBUG 0
+#define HIDRCJOY_DEBUG 1
 
 #include <stdint.h>
 #include <string.h>
@@ -42,12 +42,6 @@ using namespace atl;
 /////////////////////////////////////////////////////////////////////////////
 
 #define COUNTOF(x) (sizeof(x) / sizeof(x[0]))
-
-#if HIDRCJOY_DEBUG
-static DigitalOutputPin<9> g_pinDebug9;
-static DigitalOutputPin<10> g_pinDebug10;
-static DigitalOutputPin<11> g_pinDebug11;
-#endif
 
 static Board g_board;
 static SystemTimer g_timer;
@@ -765,11 +759,11 @@ ISR(TIMER1_CAPT_vect)
     }
 
 #if HIDRCJOY_DEBUG
-    g_pinDebug9 = risingEdge;
+    g_board.m_debug.SetD9(risingEdge);
 #endif
 
 #if HIDRCJOY_PPM
-    if (risingEdge == true)
+    if (risingEdge)
     {
         g_ppmReceiver.OnInputEdge(time);
     }
@@ -786,7 +780,7 @@ ISR(TIMER1_CAPT_vect)
 ISR(PCINT0_vect)
 {
     uint16_t time = TCNT1;
-    bool risingEdge = (PCINT_PIN & _BV(PCINT_BIT)) != 0;
+    bool risingEdge = (PPM_PCINT_PIN & _BV(PPM_PCINT_BIT)) != 0;
 
     if (g_invertedSignal)
     {
@@ -794,11 +788,12 @@ ISR(PCINT0_vect)
     }
 
 #if HIDRCJOY_DEBUG
-    g_pinDebug10 = risingEdge;
+    g_board.m_debug.SetD9(risingEdge);
+    g_board.m_debug.ToggleD10();
 #endif
 
 #if HIDRCJOY_PPM
-    if (risingEdge == true)
+    if (risingEdge)
     {
         g_ppmReceiver.OnInputEdge(time);
     }
@@ -862,31 +857,26 @@ int main(void)
     g_usbDevice.Attach();
 
 #if HIDRCJOY_ICP
-    CAPTURE_DDR &= ~_BV(CAPTURE_BIT);
-    CAPTURE_PORT |= _BV(CAPTURE_BIT);
+    // Configure D4/PD4 as ICP1
+    PPM_ICP_DDR &= ~_BV(PPM_ICP_BIT);
+    PPM_ICP_PORT |= _BV(PPM_ICP_BIT);
 #endif
 
 #if HIDRCJOY_PCINT
-    // Configure D14 (PINB.3) as PCINT3
-    PCINT_DDR &= ~_BV(PCINT_BIT);
-    PCINT_PORT |= _BV(PCINT_BIT);
+    // Configure D14/PB3 as PCINT3
+    PPM_PCINT_DDR &= ~_BV(PPM_PCINT_BIT);
+    PPM_PCINT_PORT |= _BV(PPM_PCINT_BIT);
     PCMSK0 = _BV(PCINT3);
     PCIFR = _BV(PCIF0);
     PCICR = _BV(PCIE0);
 #endif
 
 #if HIDRCJOY_ICP_ACIC_A0
-    // Enable Analog Comparator Input Capture for PF7/A0/ADC7 (instead of ICP1)
+    // Enable Analog Comparator Input Capture for D18/A0/PF7 instead of ICP1
     ACSR = _BV(ACBG) | _BV(ACIC);
     ADCSRA = 0;
     ADCSRB = _BV(ACME);
     ADMUX = _BV(MUX2) | _BV(MUX1) | _BV(MUX0);
-#endif
-
-#if HIDRCJOY_DEBUG
-    g_pinDebug9.Configure();
-    g_pinDebug10.Configure();
-    g_pinDebug11.Configure();
 #endif
 
     ReadConfigurationFromEeprom();
@@ -896,8 +886,9 @@ int main(void)
 
     StdStreams::SetupStdout([](char ch) { g_usbDevice.WriteChar(ch); });
 
-    printf_P(PSTR("Hello from hidrcjoy!"));
+    printf_P(PSTR("Hello from hidrcjoy!\n"));
 
+    SignalSource lastSource = SignalSource::None;
     uint16_t lastLedUpdate = 0;
     uint16_t lastUsbUpdate = 0;
     for (;;)
@@ -934,8 +925,15 @@ int main(void)
             g_usbDevice.WriteReport();
         }
 
+        auto signalSource = g_receiver.GetSignalSource();
+        if (signalSource != lastSource)
+        {
+            printf_P(PSTR("Signal source: %u\n"), (uint8_t)signalSource);
+            lastSource = signalSource;
+        }
+
 #if HIDRCJOY_DEBUG
-        g_pinDebug11.Toggle();
+        g_board.m_debug.ToggleD11();
 #endif
     }
 
