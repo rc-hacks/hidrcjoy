@@ -23,7 +23,11 @@ public:
     {
         timer::Initialize();
         timer::OCR() = timer::TCNT() + m_minSyncPulseWidth;
+        Reset();
+    }
 
+    void Reset()
+    {
         m_state = State::WaitingForSync;
         m_currentBank = 0;
         m_currentChannel = 0;

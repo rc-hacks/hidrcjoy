@@ -749,97 +749,56 @@ private:
 
 //---------------------------------------------------------------------------
 
-static void SetCaptureEdge(bool risingEdge)
-{
-    if (risingEdge)
-    {
-        TCCR1B |= _BV(ICES1);
-    }
-    else
-    {
-        TCCR1B &= ~_BV(ICES1);
-    }
-}
-
-static volatile uint16_t& ICR()
-{
-    return ICR1;
-}
-
-ISR(TIMER1_CAPT_vect)
-{
-    static bool risingEdge = false;
-    SetCaptureEdge(!risingEdge);
-    uint16_t time = ICR();
-
-#if HIDRCJOY_ACIC_A0
-    bool capturedEdge = !risingEdge;
-#else
-    bool capturedEdge = risingEdge;
-#endif
-
-#if HIDRCJOY_DEBUG
-    g_pinDebug9 = capturedEdge;
-#endif
-
-#if HIDRCJOY_PPM
-    if (capturedEdge == false)
-    {
-        g_ppmReceiver.OnInputEdge(time);
-    }
-#endif
-#if HIDRCJOY_PCM
-    g_pcmReceiver.OnInputEdge(time, capturedEdge);
-#endif
-
-    risingEdge = !risingEdge;
-}
-/*
 #if HIDRCJOY_ICP & (HIDRCJOY_PPM || HIDRCJOY_PCM)
 ISR(TIMER1_CAPT_vect)
 {
     uint16_t time = ICR1;
-    bool capturedEdge = (TCCR1B & _BV(ICES1)) != 0;
+    bool risingEdge = (TCCR1B & _BV(ICES1)) != 0;
 
 #if HIDRCJOY_ICP_ACIC_A0
-    capturedEdge = !capturedEdge;
+    risingEdge = !risingEdge;
 #endif
 
     if (g_invertedSignal)
     {
-        capturedEdge = !capturedEdge;
+        risingEdge = !risingEdge;
     }
 
 #if HIDRCJOY_DEBUG
-    g_pinDebug9 = capturedEdge;
+    g_pinDebug9 = risingEdge;
 #endif
 
 #if HIDRCJOY_PPM
-    if (capturedEdge == false)
+    if (risingEdge == true)
     {
         g_ppmReceiver.OnInputEdge(time);
     }
 #endif
 #if HIDRCJOY_PCM
-    g_pcmReceiver.OnInputEdge(time, capturedEdge);
+    g_pcmReceiver.OnInputEdge(time, risingEdge);
 #endif
 
     TCCR1B ^= _BV(ICES1);
 }
 #endif
-*/
+
 #if HIDRCJOY_PCINT
 ISR(PCINT0_vect)
 {
     uint16_t time = TCNT1;
-    bool risingEdge = (PINB & _BV(3)) != 0;
+    bool risingEdge = (PCINT_PIN & _BV(PCINT_BIT)) != 0;
+
+    if (g_invertedSignal)
+    {
+        risingEdge = !risingEdge;
+    }
 
 #if HIDRCJOY_DEBUG
     g_pinDebug10 = risingEdge;
 #endif
 
 #if HIDRCJOY_PPM
-    if (risingEdge == false)
+    if (risingEdge == true)
     {
         g_ppmReceiver.OnInputEdge(time);
     }
@@ -897,9 +856,10 @@ ISR(USB_COM_vect)
 
 int main(void)
 {
-#if HIDRCJOY_DEBUG
-    StdStreams::SetupStdout([](char ch) { g_usbDevice.WriteChar(ch); });
-#endif
+    g_board.Initialize();
+    g_timer.Initialize();
+    g_receiver.Initialize();
+    g_usbDevice.Attach();
 
 #if HIDRCJOY_ICP
     CAPTURE_DDR &= ~_BV(CAPTURE_BIT);
@@ -907,7 +867,7 @@ int main(void)
 #endif
 
 #if HIDRCJOY_PCINT
-    // Configure D14 (PB3/MISO) as PCINT3
+    // Configure D14 (PINB.3) as PCINT3
     PCINT_DDR &= ~_BV(PCINT_BIT);
     PCINT_PORT |= _BV(PCINT_BIT);
     PCMSK0 = _BV(PCINT3);
@@ -929,19 +889,14 @@ int main(void)
     g_pinDebug11.Configure();
 #endif
 
-    g_board.Initialize();
-    g_timer.Initialize();
-    g_receiver.Initialize();
-    g_usbDevice.Attach();
-
     ReadConfigurationFromEeprom();
 
     Watchdog::Enable(Watchdog::Timeout::Time250ms);
     Interrupts::Enable();
 
-#if HIDRCJOY_DEBUG
-    printf_P(PSTR("Hello from hidrcjoy"));
-#endif
+    StdStreams::SetupStdout([](char ch) { g_usbDevice.WriteChar(ch); });
+
+    printf_P(PSTR("Hello from hidrcjoy!"));
 
     uint16_t lastLedUpdate = 0;
     uint16_t lastUsbUpdate = 0;
