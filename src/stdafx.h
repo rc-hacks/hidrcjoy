@@ -1,12 +1,10 @@
 //
 // stdafx.h
-// Copyright (C) 2018 Marius Greuel. All rights reserved.
+// Copyright (C) 2018 Marius Greuel
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 
 #pragma once
-
-/////////////////////////////////////////////////////////////////////////////
-
 #pragma warning(disable: 4100) // unreferenced formal parameter
 
 //---------------------------------------------------------------------------

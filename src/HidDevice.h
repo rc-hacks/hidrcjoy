@@ -1,6 +1,7 @@
 //
 // HidDevice.h
-// Copyright (C) 2018 Marius Greuel. All rights reserved.
+// Copyright (C) 2018 Marius Greuel
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 
 #pragma once
@@ -8,13 +9,8 @@
 #include "../firmware/configuration.h"
 #include "../firmware/usb_reports.h"
 
-/////////////////////////////////////////////////////////////////////////////
-
 class HidDevice
 {
-    static const uint16_t m_vendorID = 0x16C0;
-    static const uint16_t m_productID = 0x03E8;
-
 public:
     ~HidDevice()
     {
@@ -182,8 +178,22 @@ private:
         if (!HidD_GetAttributes(m_hDevice, &attributes))
             return AtlHresultFromLastError();
 
-        //if (attributes.VendorID != m_vendorID || attributes.ProductID != m_productID)
-        //    return AtlHresultFromWin32(ERROR_INVALID_DATA);
+        if (attributes.VendorID == 0x2341 && attributes.ProductID == 0x8036)
+        {
+            // Arduino Leonardo
+        }
+        else if (attributes.VendorID == 0x2341 && attributes.ProductID == 0x8037)
+        {
+            // Arduino Micro
+        }
+        else if (attributes.VendorID == 0x1B4F && attributes.ProductID == 0x9206)
+        {
+            // SparkFun Pro Micro
+        }
+        else
+        {
+            return AtlHresultFromWin32(ERROR_INVALID_DATA);
+        }
 
         if (m_caps.UsagePage != HID_USAGE_PAGE_GENERIC || m_caps.Usage != HID_USAGE_GENERIC_JOYSTICK)
             return AtlHresultFromWin32(ERROR_INVALID_DATA);

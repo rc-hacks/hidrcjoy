@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
-// Used by resource.rc
+// Used by hidrcjoy.rc
 //
 #define IDC_LOAD_DEFAULT_VALUES         3
 #define IDC_READ_FROM_EEPROM            4

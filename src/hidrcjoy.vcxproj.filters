@@ -41,18 +41,18 @@
     <ClCompile Include="stdafx.cpp">
       <Filter>1 Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="rc2usb.cpp">
+    <ClCompile Include="hidrcjoy.cpp">
       <Filter>1 Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="hidrcjoy.rc">
+      <Filter>3 Resource Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="res\version.rc2">
       <Filter>3 Resource Files</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="resource.rc">
-      <Filter>3 Resource Files</Filter>
-    </ResourceCompile>
   </ItemGroup>
 </Project>

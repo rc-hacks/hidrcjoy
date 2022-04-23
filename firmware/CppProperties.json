@@ -1,13 +1,13 @@
 {
-  // Configuration file for 'Open Folder' in Visual Studio 2019.
+  // Configuration file for 'Open Folder' in Visual Studio.
   // The environment variable 'AVR8_GNU_TOOLCHAIN' must point to the AVR8 toolchain.
   "configurations": [
     {
-      "name": "Arduino Micro",
+      "name": "Arduino Leonardo",
       "includePath": [
         "${env.AVR8_GNU_TOOLCHAIN}/avr/include/**",
-        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include",
-        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/5.4.0/include-fixed",
+        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/11.1.0/include",
+        "${env.AVR8_GNU_TOOLCHAIN}/lib/gcc/avr/11.1.0/include-fixed",
         "${workspaceRoot}/**"
       ],
       "defines": [
@@ -15,7 +15,7 @@
         "__STDC_LIMIT_MACROS",
         "__AVR_ATmega32U4__",
         "F_CPU=16000000",
-        "BOARD_ARDUINO_MICRO"
+        "BOARD_ARDUINO_LEONARDO"
       ],
       "intelliSenseMode": "linux-gcc-arm",
       "compilerSwitches": "-std=c++11"

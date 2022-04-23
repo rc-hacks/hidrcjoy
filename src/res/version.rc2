@@ -26,11 +26,11 @@
 #define VER_PRODUCTVERSION_STR VER_FILEVERSION_STR
 #endif
 
-#define VER_FILEDESCRIPTION_STR     "R/C to USB Joystick\0"
-#define VER_INTERNALNAME_STR        "rc2usb.exe\0"
+#define VER_FILEDESCRIPTION_STR     "R/C to PC Joystick\0"
+#define VER_INTERNALNAME_STR        "hidrcjoy.exe\0"
 #define VER_COMPANYNAME_STR         "Marius Greuel"
 #define VER_LEGALCOPYRIGHT_STR      "\251 2018 Marius Greuel. All rights reserved."
-#define VER_PRODUCTNAME_STR         "rc2usb"
+#define VER_PRODUCTNAME_STR         "hidrcjoy"
 #define VER_FILETYPE                VFT_APP
 #define VER_FILESUBTYPE             0
 

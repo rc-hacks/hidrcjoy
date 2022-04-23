@@ -1,14 +1,13 @@
 //
 // MainDialog.h
-// Copyright (C) 2018 Marius Greuel. All rights reserved.
+// Copyright (C) 2018 Marius Greuel
+// SPDX-License-Identifier: GPL-3.0-or-later
 //
 
 #pragma once
 #include "resource.h"
 #include "AtlHelper.h"
 #include "HidDevice.h"
-
-/////////////////////////////////////////////////////////////////////////////
 
 class CMainDialog : public CDialogImpl<CMainDialog>
 {

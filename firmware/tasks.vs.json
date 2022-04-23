@@ -1,5 +1,5 @@
 {
-  // Configuration file for 'Open Folder' in Visual Studio 2017.
+  // Configuration file for 'Open Folder' in Visual Studio.
   // Requires make.exe in your environment path variable.
   "version": "0.2.1",
   "outDir": "\"${workspaceRoot}\\objs\"",
@@ -10,10 +10,7 @@
       "type": "launch",
       "contextType": "build",
       "command": "make",
-      "args": [
-        "-s",
-        "flash"
-      ],
+      "args": [ "-s" ],
       "envVars": {
         "VSCMD_START_DIR": "\"${workspaceRoot}\""
       }

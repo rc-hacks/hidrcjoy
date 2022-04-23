@@ -1,13 +1,18 @@
 #
-# makefile
-# Copyright (C) 2018 Marius Greuel. All rights reserved.
+# Makefile
+# Copyright (C) 2018 Marius Greuel
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-BOARD ?= BOARD_ARDUINO_LEONARDO
+MCU = atmega32u4
+F_CPU = 16000000
 
-ATL_PATH = atl
-TARGET = rc2usb
-SOURCES = rc2usb.cpp
+TARGET = hidrcjoy
+SOURCES = hidrcjoy.cpp
 
-include atl/boards.mk
+CPPFLAGS += -DBOARD_ARDUINO_LEONARDO=1
+CPPFLAGS += -Iatl/include
+
+AVRDUDE_FLAGS ?= -c avr109 -p $(MCU) -P usb:2341:0036 -D 
+
 include atl/avr8.mk
