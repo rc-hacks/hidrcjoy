@@ -23,6 +23,16 @@ public:
         TIMSK1 |= _BV(ICIE1);
     }
 
+    static volatile uint16_t& TCNT()
+    {
+        return TCNT1;
+    }
+
+    static volatile uint16_t& ICR()
+    {
+        return ICR1;
+    }
+
     // clk/8 => 1.3824 ticks/us
 
     static constexpr uint16_t TicksToUs(uint16_t value)

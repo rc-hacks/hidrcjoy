@@ -31,14 +31,14 @@ public:
         return TCNT1;
     }
 
-    static volatile uint16_t& OCR()
-    {
-        return OCR1B;
-    }
-
     static volatile uint16_t& ICR()
     {
         return ICR1;
+    }
+
+    static volatile uint16_t& OCR()
+    {
+        return OCR1B;
     }
 
     // clk/8 => 1.3824 ticks/us

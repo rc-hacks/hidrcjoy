@@ -1,5 +1,5 @@
 //
-// system_timer.h
+// system_timer1a.h
 // Copyright (C) 2018 Marius Greuel
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
@@ -9,7 +9,7 @@
 #include <avr/io.h>
 #include <stdint.h>
 
-class SystemTimer
+class SystemTimer1A
 {
     static const uint16_t TaskTickUs = 1000; // 1ms
 
@@ -30,6 +30,21 @@ public:
         TIMSK1 |= _BV(OCIE1A);
     }
 
+    static volatile uint16_t& TCNT()
+    {
+        return TCNT1;
+    }
+
+    static volatile uint16_t& ICR()
+    {
+        return ICR1;
+    }
+
+    static volatile uint16_t& OCR()
+    {
+        return OCR1A;
+    }
+
     uint16_t GetMilliseconds() const
     {
         atl::AutoLock lock;
@@ -38,7 +53,7 @@ public:
 
     void OnOutputCompare()
     {
-        OCR1A += UsToTicks(TaskTickUs);
+        OCR() += UsToTicks(TaskTickUs);
         m_milliseconds++;
     }
 

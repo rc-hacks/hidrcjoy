@@ -27,7 +27,7 @@
 
 using namespace atl;
 
-#include "shared/system_timer.h"
+#include "shared/system_timer1a.h"
 #include "shared/ppm_receiver.h"
 #include "shared/ppm_receiver_timer1b.h"
 #include "shared/pcm_receiver.h"
@@ -44,7 +44,7 @@ using namespace atl;
 #define COUNTOF(x) (sizeof(x) / sizeof(x[0]))
 
 static Board g_board;
-static SystemTimer g_timer;
+static SystemTimer1A g_timer;
 static Configuration g_configuration;
 static Configuration g_eepromConfiguration __attribute__((section(".eeprom")));
 static uint16_t g_updateRate;
@@ -94,31 +94,28 @@ public:
 
     void Update()
     {
-        if (false)
-        {
-        }
+        auto signalSource = SignalSource::None;
+
 #if HIDRCJOY_PPM
-        else if (g_ppmReceiver.IsReceiving())
+        if (g_ppmReceiver.IsReceiving())
         {
-            m_signalSource = SignalSource::PPM;
+            signalSource = SignalSource::PPM;
         }
 #endif
 #if HIDRCJOY_PCM
-        else if (g_pcmReceiver.IsReceiving())
+        if (g_pcmReceiver.IsReceiving())
         {
-            m_signalSource = SignalSource::PCM;
+            signalSource = SignalSource::PCM;
         }
 #endif
 #if HIDRCJOY_SRXL
-        else if (g_srxlReceiver.IsReceiving())
+        if (g_srxlReceiver.IsReceiving())
         {
-            m_signalSource = SignalSource::SRXL;
+            signalSource = SignalSource::SRXL;
         }
 #endif
-        else
-        {
-            m_signalSource = SignalSource::None;
-        }
+
+        m_signalSource = signalSource;
     }
 
     void LoadDefaultConfiguration()
