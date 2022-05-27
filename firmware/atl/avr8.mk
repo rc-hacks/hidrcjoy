@@ -65,7 +65,7 @@ ifdef DEBUG
     OPTIMIZATION_FLAGS ?= -Og
 else
     CPPFLAGS += -DNDEBUG
-    OPTIMIZATION_FLAGS ?= -Os -flto
+    OPTIMIZATION_FLAGS ?= -Os
 endif
 
 OBJDIR ?= objs
